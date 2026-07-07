@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ContentStatus } from '../../generated/prisma/client';
+import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsPostDto } from './dto/update-news-post.dto';
@@ -32,7 +32,7 @@ export class NewsService {
         ...rest,
         eventDate: eventDate ? new Date(eventDate) : undefined,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-      } as any,
+      } as unknown as Prisma.NewsPostUncheckedCreateInput,
     });
   }
 
@@ -45,7 +45,7 @@ export class NewsService {
         ...rest,
         eventDate: eventDate ? new Date(eventDate) : undefined,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-      } as any,
+      } as unknown as Prisma.NewsPostUncheckedUpdateInput,
     });
   }
 

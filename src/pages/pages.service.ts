@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ContentStatus } from '../../generated/prisma/client';
+import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
@@ -19,14 +19,16 @@ export class PagesService {
   }
 
   create(dto: CreatePageDto) {
-    return this.prisma.page.create({ data: dto as any });
+    return this.prisma.page.create({
+      data: dto as unknown as Prisma.PageCreateInput,
+    });
   }
 
   async update(slug: string, dto: UpdatePageDto) {
     const page = await this.findBySlug(slug);
     return this.prisma.page.update({
       where: { id: page.id },
-      data: dto as any,
+      data: dto as unknown as Prisma.PageUpdateInput,
     });
   }
 

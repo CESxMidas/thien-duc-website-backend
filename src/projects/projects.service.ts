@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ContentStatus } from '../../generated/prisma/client';
+import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -40,14 +40,16 @@ export class ProjectsService {
   }
 
   create(dto: CreateProjectDto) {
-    return this.prisma.project.create({ data: dto as any });
+    return this.prisma.project.create({
+      data: dto as unknown as Prisma.ProjectCreateInput,
+    });
   }
 
   async update(slug: string, dto: UpdateProjectDto) {
     const project = await this.findBySlug(slug);
     return this.prisma.project.update({
       where: { id: project.id },
-      data: dto as any,
+      data: dto as unknown as Prisma.ProjectUpdateInput,
     });
   }
 
@@ -68,7 +70,10 @@ export class ProjectsService {
   async createItem(projectSlug: string, dto: CreateProjectItemDto) {
     const project = await this.findBySlug(projectSlug);
     return this.prisma.projectItem.create({
-      data: { ...dto, projectId: project.id } as any,
+      data: {
+        ...dto,
+        projectId: project.id,
+      } as unknown as Prisma.ProjectItemUncheckedCreateInput,
     });
   }
 
@@ -80,7 +85,7 @@ export class ProjectsService {
     const item = await this.findItemBySlug(projectSlug, itemSlug);
     return this.prisma.projectItem.update({
       where: { id: item.id },
-      data: dto as any,
+      data: dto as unknown as Prisma.ProjectItemUpdateInput,
     });
   }
 

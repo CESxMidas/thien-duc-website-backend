@@ -1,0 +1,232 @@
+// Prisma schema — Thiên Đức backend
+// ERD nháp theo docs/KE-HOACH-CODING.md mục Sprint 0 (12 bảng).
+// Các field nội dung song ngữ dùng Json dạng { vi: string; en?: string }
+// theo thiết kế JSONB ở báo cáo mục 2.2.1 — EN có thể để trống cho tới khi có bản dịch.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  EDITOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING
+  PUBLISHED
+}
+
+enum ProjectStatus {
+  DA_BAN_GIAO
+  DANG_THI_CONG
+  CHUAN_BI_KHOI_CONG
+}
+
+enum SubmissionStatus {
+  NEW
+  IN_PROGRESS
+  DONE
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  name                String
+  role                Role      @default(EDITOR)
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  refreshTokens RefreshToken[]
+  mediaAssets   MediaAsset[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @map("token_hash")
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Project {
+  id              String        @id @default(uuid())
+  slug            String        @unique
+  title           Json
+  summary         Json
+  description     Json?
+  status          ProjectStatus
+  contentStatus   ContentStatus @default(DRAFT) @map("content_status")
+  location        String?
+  image           String?
+  gallery         String[]
+  category        String?
+  highlights      Json?
+  quickFacts      Json?         @map("quick_facts")
+  gallerySections Json?         @map("gallery_sections")
+  mapLocation     Json?         @map("map_location")
+  order           Int           @default(0)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  items         ProjectItem[]
+  galleryImages ProjectGalleryImage[]
+
+  @@map("projects")
+}
+
+model ProjectItem {
+  id              String         @id @default(uuid())
+  projectId       String         @map("project_id")
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slug            String
+  title           Json
+  summary         Json?
+  description     Json?
+  status          ProjectStatus?
+  image           String?
+  highlights      Json?
+  quickFacts      Json?          @map("quick_facts")
+  gallerySections Json?          @map("gallery_sections")
+  order           Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  galleryImages ProjectGalleryImage[]
+
+  @@unique([projectId, slug])
+  @@map("project_items")
+}
+
+model ProjectGalleryImage {
+  id            String       @id @default(uuid())
+  projectId     String       @map("project_id")
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectItemId String?      @map("project_item_id")
+  projectItem   ProjectItem? @relation(fields: [projectItemId], references: [id], onDelete: SetNull)
+  url           String
+  caption       Json?
+  order         Int          @default(0)
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@map("project_gallery")
+}
+
+model NewsCategory {
+  id    String @id @default(uuid())
+  slug  String @unique
+  name  Json
+  order Int    @default(0)
+
+  posts NewsPost[]
+
+  @@map("news_categories")
+}
+
+model NewsPost {
+  id          String        @id @default(uuid())
+  slug        String        @unique
+  categoryId  String?       @map("category_id")
+  category    NewsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title       Json
+  summary     Json
+  content     Json?
+  author      String?
+  image       String?
+  eventDate   DateTime?     @map("event_date")
+  publishedAt DateTime?     @map("published_at")
+  scheduledAt DateTime?     @map("scheduled_at")
+  status      ContentStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@map("news_posts")
+}
+
+model Page {
+  id        String        @id @default(uuid())
+  slug      String        @unique
+  title     Json
+  content   Json
+  status    ContentStatus @default(DRAFT)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
+
+model Banner {
+  id             String   @id @default(uuid())
+  image          String
+  eyebrow        Json?
+  title          Json
+  subtitle       Json?
+  href           String
+  ctaLabel       Json?    @map("cta_label")
+  objectPosition String?  @map("object_position")
+  order          Int      @default(0)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("banners")
+}
+
+model ContactSubmission {
+  id           String           @id @default(uuid())
+  name         String
+  phone        String
+  email        String
+  inquiryType  String?          @map("inquiry_type")
+  message      String
+  status       SubmissionStatus @default(NEW)
+  internalNote String?          @map("internal_note")
+  ipAddress    String?          @map("ip_address")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  @@map("contact_submissions")
+}
+
+model MediaAsset {
+  id           String   @id @default(uuid())
+  url          String
+  publicId     String?  @map("public_id")
+  width        Int?
+  height       Int?
+  format       String?
+  bytes        Int?
+  folder       String?
+  uploadedById String?  @map("uploaded_by_id")
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("media_assets")
+}
+
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}

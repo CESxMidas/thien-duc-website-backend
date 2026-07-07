@@ -1,8 +1,8 @@
 # thien-duc-website-backend
 
 Backend NestJS + Prisma + PostgreSQL cho website Thiên Đức (PA2). Xem kế hoạch tổng ở
-`../thien-duc-website-frontend/docs/KE-HOACH-CODING.md` và các câu hỏi chờ công ty xác nhận ở
-`../thien-duc-website-frontend/docs/CAU-HOI-CAN-XAC-NHAN.md`.
+`../docs/KE-HOACH-CODING.md` và các câu hỏi chờ công ty xác nhận ở
+`../docs/CAU-HOI-CAN-XAC-NHAN.md`.
 
 ## Modules
 

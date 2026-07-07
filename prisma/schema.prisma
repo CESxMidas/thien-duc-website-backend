@@ -4,8 +4,9 @@
 // theo thiết kế JSONB ở báo cáo mục 2.2.1 — EN có thể để trống cho tới khi có bản dịch.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {

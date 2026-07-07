@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: thien-duc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: thienduc
+      POSTGRES_PASSWORD: thienduc_dev
+      POSTGRES_DB: thien_duc
+    ports:
+      # 5433 vì máy dev có sẵn PostgreSQL Windows chiếm 5432
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

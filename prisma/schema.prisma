@@ -196,7 +196,7 @@ model ContactSubmission {
   id           String           @id @default(uuid())
   name         String
   phone        String
-  email        String
+  email        String?
   inquiryType  String?          @map("inquiry_type")
   message      String
   status       SubmissionStatus @default(NEW)

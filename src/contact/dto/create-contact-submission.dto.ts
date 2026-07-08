@@ -10,9 +10,10 @@ export class CreateContactSubmissionDto {
   @IsString()
   phone!: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsEmail()
-  email!: string;
+  email?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

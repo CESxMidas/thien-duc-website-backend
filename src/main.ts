@@ -38,6 +38,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = configService.get<number>('PORT') ?? 3001;
-  await app.listen(port);
+  // Bind 0.0.0.0 để Render/host container định tuyến được (mặc định chỉ localhost trong 1 số môi trường).
+  await app.listen(port, '0.0.0.0');
 }
 void bootstrap();

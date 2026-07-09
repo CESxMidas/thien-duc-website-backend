@@ -1,0 +1,308 @@
+// Seed dữ liệu dự án thật (idempotent — chạy lại nhiều lần vẫn an toàn).
+//
+// Nguồn nội dung: docs/CAU-HOI-CAN-XAC-NHAN.md câu 1, 2 và 7 (công ty đã xác
+// nhận ngày 2026-07-07). Ảnh trỏ vào `public/images/projects/` của frontend.
+//
+// Chạy:  npm run prisma:seed:projects
+//
+// Ghi chú mô hình dữ liệu: Fancy Tower là **hạng mục con** (`project_items`)
+// của Khu đô thị Hưng Phú chứ không phải dự án độc lập — đúng theo câu 7
+// ("Chung cư Fancy Tower — thuộc khu đô thị Hưng Phú") và đúng với cách ảnh
+// đang được xếp thư mục (`images/projects/hung-phu/fancy-tower/`).
+require('dotenv/config');
+const { Client } = require('pg');
+
+/** Field song ngữ: chỉ có tiếng Việt, bản tiếng Anh bổ sung ở Sprint 4. */
+const vi = (text) => ({ vi: text });
+
+const projects = [
+  {
+    slug: 'khu-do-thi-hung-phu',
+    title: 'Khu đô thị Hưng Phú',
+    summary:
+      'Khu đô thị 11,25 ha tại trung tâm TP. Bến Tre do Thiên Đức làm chủ đầu tư, gồm 330 căn nhà ở thấp tầng và tòa căn hộ Fancy Tower.',
+    description:
+      'Khu đô thị Hưng Phú tọa lạc mặt tiền đường Nguyễn Thị Định, Phường Phú Tân, TP. Bến Tre, trên khu đất hậu cần Tỉnh đội cũ. Dự án có sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật. Hạ tầng, đường nội khu và các phân khu nhà phố thấp tầng đã hoàn thiện, đa số cư dân đã dọn vào sinh sống ổn định. Trung tâm thương mại Hưng Phú Mall và nhà trẻ nội khu đang trong giai đoạn hoàn thiện cuối cùng.',
+    status: 'DANG_THI_CONG',
+    location: 'Phường Phú Tân, TP. Bến Tre, tỉnh Bến Tre',
+    category: 'Khu đô thị',
+    image: '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
+    highlights: [
+      'Mặt tiền đường Nguyễn Thị Định, ngay khu trung tâm TP. Bến Tre.',
+      'Sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật.',
+      'Tòa nhà hành chính Liên Sở của tỉnh nằm trong nội khu.',
+      'Tiện ích: khu dịch vụ ngầm, hồ bơi, trường mẫu giáo, trung tâm văn hóa thể dục thể thao, công viên cây xanh, siêu thị.',
+    ],
+    quickFacts: [
+      { label: 'Chủ đầu tư', value: 'Công ty TNHH ĐT - XD - TM Thiên Đức' },
+      { label: 'Tổng diện tích', value: '112.521 m² (11,25 ha)' },
+      { label: 'Sản phẩm thấp tầng', value: '330 căn nhà phố liền kề, shophouse, biệt thự' },
+      { label: 'Căn hộ', value: '196 căn (Fancy Tower — 19 tầng nổi, 1 tầng hầm)' },
+      { label: 'Pháp lý', value: 'Sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật' },
+    ],
+    gallery: [
+      '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
+      '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-02.jpg',
+      '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-03.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-exterior-01.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-living-room-01.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-living-room-02.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-double-01.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-01.jpg',
+      '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-02.jpg',
+    ],
+    items: [
+      {
+        slug: 'fancy-tower',
+        title: 'Chung cư Fancy Tower',
+        summary:
+          'Tòa căn hộ cao cấp 19 tầng nổi và 1 tầng hầm với 196 căn hộ — dự án chung cư cao tầng đầu tiên tại khu vực.',
+        description:
+          'Fancy Tower đã được Sở Xây dựng nghiệm thu hoàn thành công trình và sẵn sàng cấp sổ hồng cho cư dân. Tòa nhà đã hoàn thiện thi công, bàn giao và đưa vào vận hành.',
+        status: 'DA_BAN_GIAO',
+        image: '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-day-01.jpg',
+        highlights: [
+          '19 tầng nổi, 1 tầng hầm, 196 căn hộ.',
+          'Đã nghiệm thu hoàn thành công trình, sẵn sàng cấp sổ hồng.',
+          'Hồ bơi và khu tiện ích nội khu đã vận hành.',
+        ],
+        quickFacts: [
+          { label: 'Quy mô', value: '19 tầng nổi + 1 tầng hầm' },
+          { label: 'Số căn hộ', value: '196 căn' },
+          { label: 'Tình trạng', value: 'Đã bàn giao, đang vận hành' },
+        ],
+        gallery: [
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-day-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-evening-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-plaza-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-plaza-02.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-02.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-03.jpg',
+        ],
+      },
+      {
+        slug: 'hung-phu-mall',
+        title: 'Trung tâm thương mại Hưng Phú Mall',
+        summary:
+          'Trung tâm thương mại 5 tầng trong nội khu, đang hoàn thiện giai đoạn cuối để đưa vào khai thác.',
+        status: 'DANG_THI_CONG',
+        quickFacts: [{ label: 'Quy mô', value: '5 tầng' }],
+        gallery: [],
+      },
+      {
+        slug: 'khu-nha-o-thap-tang',
+        title: 'Khu nhà ở thấp tầng',
+        summary:
+          '330 căn nhà phố liền kề, shophouse đi bộ và biệt thự — đã hoàn thiện, cư dân đã dọn vào sinh sống ổn định.',
+        status: 'DA_BAN_GIAO',
+        quickFacts: [{ label: 'Số căn', value: '330 căn' }],
+        gallery: [],
+      },
+    ],
+  },
+  {
+    slug: 'chung-cu-la-bonita',
+    title: 'Chung cư La Bonita',
+    summary:
+      'Tòa căn hộ 14 tầng với 60 căn hộ trên tuyến đường Nguyễn Gia Trí, Quận Bình Thạnh, TP.HCM.',
+    description:
+      'La Bonita nằm tại số 6-8 đường Nguyễn Gia Trí (đường D2 cũ), Phường 25, Quận Bình Thạnh. Tòa nhà đã hoàn thiện xây dựng và bàn giao từ năm 2018. Tầng 1-4 là trung tâm thương mại, officetel và văn phòng cho thuê; tầng 5-14 là khu căn hộ.',
+    status: 'DA_BAN_GIAO',
+    location: 'Số 6-8 Nguyễn Gia Trí, Phường 25, Quận Bình Thạnh, TP.HCM',
+    category: 'Chung cư',
+    image: '/images/projects/la-bonita/building/la-bonita-building-render-01.jpg',
+    highlights: [
+      'Kết nối trực tiếp ra đường Điện Biên Phủ và Xô Viết Nghệ Tĩnh, 5-10 phút vào trung tâm Quận 1.',
+      'Mật độ thoáng: chỉ khoảng 6 căn mỗi sàn.',
+      'Sát các trường đại học lớn (Hutech, Ngoại Thương, Giao Thông Vận Tải).',
+    ],
+    quickFacts: [
+      { label: 'Diện tích đất', value: '1.374 m²' },
+      { label: 'Diện tích sàn xây dựng', value: '11.654 m²' },
+      { label: 'Quy mô', value: '1 block, 14 tầng nổi, 2 tầng hầm' },
+      { label: 'Số căn hộ', value: '60 căn' },
+      { label: 'Bàn giao', value: 'Năm 2018' },
+    ],
+    gallery: [
+      '/images/projects/la-bonita/building/la-bonita-building-render-01.jpg',
+      '/images/projects/la-bonita/building/la-bonita-building-render-02.jpg',
+    ],
+    items: [],
+  },
+  {
+    slug: 'du-an-vung-tau',
+    title: 'Silver Sea Tower',
+    summary:
+      'Tòa nhà phức hợp 18 tầng tại số 47 Ba Cu, trung tâm TP. Vũng Tàu, với 80 căn hộ đã có sổ hồng lâu dài.',
+    description:
+      'Silver Sea Tower tọa lạc ngay tuyến đường Ba Cu sầm uất, sát cạnh UBND TP. Vũng Tàu, cách Bãi Trước khoảng 500m nên sở hữu tầm nhìn hướng biển ở cả hai mặt tòa nhà. Dự án đã hoàn thiện, bàn giao và đưa vào vận hành đồng bộ cả khối căn hộ lẫn khối văn phòng, thương mại.',
+    status: 'DA_BAN_GIAO',
+    location: 'Số 47 Ba Cu, Phường 1, TP. Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu',
+    category: 'Chung cư',
+    image: '/images/projects/vung-tau/vung-tau-center-exterior-01.webp',
+    highlights: [
+      'Đã có sổ hồng lâu dài riêng cho từng căn hộ, chuyển nhượng công chứng sang tên bình thường.',
+      'Tầng 1-3 trung tâm thương mại, tầng 4-7 văn phòng, tầng 8-18 căn hộ.',
+      'Sân vườn trên cao và bãi đáp trực thăng phục vụ công tác PCCC tại tầng áp mái.',
+    ],
+    quickFacts: [
+      { label: 'Diện tích khu đất', value: '1.490,3 m²' },
+      { label: 'Quy mô', value: '1 block, 18 tầng nổi, 2 tầng hầm' },
+      { label: 'Số căn hộ', value: '80 căn (101 - 162 m², 2-3 phòng ngủ)' },
+      { label: 'Chủ đầu tư', value: 'CTCP Địa ốc Nam Gia phối hợp CTCP Thương mại Tổng hợp BR-VT' },
+      { label: 'Pháp lý', value: 'Sổ hồng lâu dài từng căn' },
+    ],
+    gallery: [
+      '/images/projects/vung-tau/vung-tau-center-exterior-01.webp',
+      '/images/projects/vung-tau/vung-tau-center-exterior-02.webp',
+    ],
+    items: [],
+  },
+  {
+    slug: 'du-an-bay-hien',
+    title: 'Bảy Hiền Tower',
+    summary:
+      'Tòa nhà 23 tầng tại số 9 Phạm Phú Thứ, Quận Tân Bình, TP.HCM, gồm khối chợ sỉ phụ liệu dệt may và khu căn hộ.',
+    description:
+      'Bảy Hiền Tower cách Ngã tư Bảy Hiền khoảng 300m, sát vách chợ sỉ Tân Bình. Khối căn hộ đã hoàn thiện thô và bàn giao, hơn 150 hộ dân đã sinh sống ổn định. Khối thương mại 5 tầng đã xây xong phần thô nhưng chưa đưa vào khai thác. Dự án đang được UBND TP.HCM xem xét gỡ vướng thủ tục.',
+    status: 'DANG_THI_CONG',
+    location: 'Số 9 Phạm Phú Thứ, Phường 11, Quận Tân Bình, TP.HCM',
+    category: 'Chung cư',
+    image: '/images/projects/bay-hien/bay-hien-tower-exterior-01.jpg',
+    highlights: [
+      'Cách Ngã tư Bảy Hiền khoảng 300m, sát chợ sỉ Tân Bình.',
+      '5 tầng khối đế thương mại (~500 sạp chợ sỉ phụ liệu dệt may).',
+      'Chưa được cấp sổ hồng — dự án đang trong danh sách được TP.HCM xử lý gỡ vướng.',
+    ],
+    quickFacts: [
+      { label: 'Diện tích khu đất', value: '2.712 m²' },
+      { label: 'Quy mô', value: '23 tầng nổi, 2 tầng hầm (hầm ~5.500 m²)' },
+      { label: 'Số căn hộ', value: '168 - 196 căn (70 - 101 m² và Duplex)' },
+      { label: 'Pháp lý', value: 'Chưa cấp sổ hồng, đang xử lý gỡ vướng' },
+    ],
+    gallery: ['/images/projects/bay-hien/bay-hien-tower-exterior-01.jpg'],
+    items: [],
+  },
+];
+
+/** Ảnh gallery seed lại từ đầu mỗi lần chạy — tránh nhân bản khi chạy lặp. */
+async function seedGallery(client, projectId, projectItemId, urls) {
+  for (const [order, url] of urls.entries()) {
+    await client.query(
+      `INSERT INTO project_gallery (id, project_id, project_item_id, url, "order", created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
+      [projectId, projectItemId, url, order],
+    );
+  }
+}
+
+async function main() {
+  const useSsl = /\brender\.com\b/.test(process.env.DATABASE_URL ?? '');
+
+  // `.env` của máy dev đang trỏ vào Render (production). Seed ghi đè nội dung
+  // dự án nên phải xác nhận có chủ ý, không để lỡ tay chạy nhầm.
+  if (useSsl && process.env.SEED_CONFIRM_PRODUCTION !== 'yes') {
+    throw new Error(
+      'DATABASE_URL đang trỏ vào production (Render). Chạy lại với ' +
+        'SEED_CONFIRM_PRODUCTION=yes nếu thực sự muốn seed production.',
+    );
+  }
+
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  });
+  await client.connect();
+
+  for (const [order, project] of projects.entries()) {
+    const res = await client.query(
+      `INSERT INTO projects
+         (id, slug, title, summary, description, status, content_status, location,
+          image, gallery, category, highlights, quick_facts, "order", created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::"ProjectStatus", 'PUBLISHED', $6,
+               $7, $8, $9, $10, $11, $12, now(), now())
+       ON CONFLICT (slug) DO UPDATE
+         SET title = EXCLUDED.title,
+             summary = EXCLUDED.summary,
+             description = EXCLUDED.description,
+             status = EXCLUDED.status,
+             location = EXCLUDED.location,
+             image = EXCLUDED.image,
+             gallery = EXCLUDED.gallery,
+             category = EXCLUDED.category,
+             highlights = EXCLUDED.highlights,
+             quick_facts = EXCLUDED.quick_facts,
+             "order" = EXCLUDED."order",
+             updated_at = now()
+       RETURNING id`,
+      [
+        project.slug,
+        vi(project.title),
+        vi(project.summary),
+        project.description ? vi(project.description) : null,
+        project.status,
+        project.location ?? null,
+        project.image ?? null,
+        project.gallery ?? [],
+        project.category ?? null,
+        JSON.stringify(project.highlights ?? []),
+        JSON.stringify(project.quickFacts ?? []),
+        order,
+      ],
+    );
+    const projectId = res.rows[0].id;
+
+    // Xóa ảnh cũ trước khi seed lại (gallery không có ràng buộc duy nhất).
+    await client.query('DELETE FROM project_gallery WHERE project_id = $1', [
+      projectId,
+    ]);
+    await seedGallery(client, projectId, null, project.gallery ?? []);
+
+    for (const [itemOrder, item] of (project.items ?? []).entries()) {
+      const itemRes = await client.query(
+        `INSERT INTO project_items
+           (id, project_id, slug, title, summary, description, status, image,
+            highlights, quick_facts, "order", created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::"ProjectStatus", $7, $8, $9, $10, now(), now())
+         ON CONFLICT (project_id, slug) DO UPDATE
+           SET title = EXCLUDED.title,
+               summary = EXCLUDED.summary,
+               description = EXCLUDED.description,
+               status = EXCLUDED.status,
+               image = EXCLUDED.image,
+               highlights = EXCLUDED.highlights,
+               quick_facts = EXCLUDED.quick_facts,
+               "order" = EXCLUDED."order",
+               updated_at = now()
+         RETURNING id`,
+        [
+          projectId,
+          item.slug,
+          vi(item.title),
+          item.summary ? vi(item.summary) : null,
+          item.description ? vi(item.description) : null,
+          item.status ?? null,
+          item.image ?? null,
+          JSON.stringify(item.highlights ?? []),
+          JSON.stringify(item.quickFacts ?? []),
+          itemOrder,
+        ],
+      );
+      await seedGallery(client, projectId, itemRes.rows[0].id, item.gallery ?? []);
+    }
+
+    const itemCount = (project.items ?? []).length;
+    console.log(
+      `✅ ${project.title} — ${(project.gallery ?? []).length} ảnh, ${itemCount} hạng mục`,
+    );
+  }
+
+  await client.end();
+  console.log(`\n✅ Đã seed ${projects.length} dự án.`);
+}
+
+main().catch((error) => {
+  console.error('❌ Seed dự án thất bại:', error instanceof Error ? error.message : error);
+  process.exit(1);
+});

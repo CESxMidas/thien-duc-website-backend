@@ -1,29 +1,55 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateGalleryImageDto } from './dto/update-gallery-image.dto';
 import { UpdateProjectItemDto } from './dto/update-project-item.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+
+/** Mã lỗi Prisma khi vi phạm ràng buộc duy nhất (`slug` dự án, `[projectId, slug]` hạng mục). */
+const PRISMA_UNIQUE_VIOLATION = 'P2002';
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string })?.code === PRISMA_UNIQUE_VIOLATION;
+}
+
+/** Ảnh và hạng mục luôn trả theo `order` tăng dần — thứ tự do biên tập viên đặt. */
+const BY_ORDER = { order: 'asc' } as const;
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * `publishedOnly` = true cho website công khai; false cho Admin CMS (thấy cả
+   * bản nháp và bài chờ duyệt).
+   */
   findAll(publishedOnly = false) {
     return this.prisma.project.findMany({
       where: publishedOnly
         ? { contentStatus: ContentStatus.PUBLISHED }
         : undefined,
       orderBy: { order: 'asc' },
-      include: { items: true },
+      include: {
+        items: { orderBy: BY_ORDER },
+        _count: { select: { galleryImages: true } },
+      },
     });
   }
 
   async findBySlug(slug: string) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
-      include: { items: true, galleryImages: true },
+      include: {
+        items: { orderBy: BY_ORDER },
+        galleryImages: { orderBy: BY_ORDER },
+      },
     });
     if (!project) throw new NotFoundException('Không tìm thấy dự án');
     return project;
@@ -33,24 +59,38 @@ export class ProjectsService {
     const project = await this.findBySlug(projectSlug);
     const item = await this.prisma.projectItem.findFirst({
       where: { projectId: project.id, slug: itemSlug },
-      include: { galleryImages: true },
+      include: { galleryImages: { orderBy: BY_ORDER } },
     });
     if (!item) throw new NotFoundException('Không tìm thấy hạng mục dự án');
     return item;
   }
 
-  create(dto: CreateProjectDto) {
-    return this.prisma.project.create({
-      data: dto as unknown as Prisma.ProjectCreateInput,
-    });
+  async create(dto: CreateProjectDto) {
+    try {
+      return await this.prisma.project.create({
+        data: dto as unknown as Prisma.ProjectCreateInput,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(`Slug "${dto.slug}" đã được dùng`);
+      }
+      throw error;
+    }
   }
 
   async update(slug: string, dto: UpdateProjectDto) {
     const project = await this.findBySlug(slug);
-    return this.prisma.project.update({
-      where: { id: project.id },
-      data: dto as unknown as Prisma.ProjectUpdateInput,
-    });
+    try {
+      return await this.prisma.project.update({
+        where: { id: project.id },
+        data: dto as unknown as Prisma.ProjectUpdateInput,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(`Slug "${dto.slug}" đã được dùng`);
+      }
+      throw error;
+    }
   }
 
   async updateStatus(slug: string, status: ContentStatus) {
@@ -63,18 +103,30 @@ export class ProjectsService {
 
   async remove(slug: string) {
     const project = await this.findBySlug(slug);
+    // Hạng mục và ảnh gallery xóa theo cascade (khai báo ở schema.prisma).
     await this.prisma.project.delete({ where: { id: project.id } });
     return { deleted: true };
   }
 
+  /* ----------------------------- Hạng mục con ----------------------------- */
+
   async createItem(projectSlug: string, dto: CreateProjectItemDto) {
     const project = await this.findBySlug(projectSlug);
-    return this.prisma.projectItem.create({
-      data: {
-        ...dto,
-        projectId: project.id,
-      } as unknown as Prisma.ProjectItemUncheckedCreateInput,
-    });
+    try {
+      return await this.prisma.projectItem.create({
+        data: {
+          ...dto,
+          projectId: project.id,
+        } as unknown as Prisma.ProjectItemUncheckedCreateInput,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `Dự án này đã có hạng mục với slug "${dto.slug}"`,
+        );
+      }
+      throw error;
+    }
   }
 
   async updateItem(
@@ -83,15 +135,142 @@ export class ProjectsService {
     dto: UpdateProjectItemDto,
   ) {
     const item = await this.findItemBySlug(projectSlug, itemSlug);
-    return this.prisma.projectItem.update({
-      where: { id: item.id },
-      data: dto as unknown as Prisma.ProjectItemUpdateInput,
-    });
+    try {
+      return await this.prisma.projectItem.update({
+        where: { id: item.id },
+        data: dto as unknown as Prisma.ProjectItemUpdateInput,
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `Dự án này đã có hạng mục với slug "${dto.slug}"`,
+        );
+      }
+      throw error;
+    }
   }
 
   async removeItem(projectSlug: string, itemSlug: string) {
     const item = await this.findItemBySlug(projectSlug, itemSlug);
     await this.prisma.projectItem.delete({ where: { id: item.id } });
     return { deleted: true };
+  }
+
+  /* ------------------------------- Thư viện ảnh ---------------------------- */
+
+  async findGallery(projectSlug: string) {
+    const project = await this.findBySlug(projectSlug);
+    return this.prisma.projectGalleryImage.findMany({
+      where: { projectId: project.id },
+      orderBy: BY_ORDER,
+    });
+  }
+
+  /**
+   * Thêm một ảnh vào thư viện dự án. `itemSlug` gắn ảnh vào hạng mục con —
+   * hạng mục phải thuộc đúng dự án này (findItemBySlug đã kiểm tra).
+   */
+  async addGalleryImage(projectSlug: string, dto: CreateGalleryImageDto) {
+    const project = await this.findBySlug(projectSlug);
+    const projectItemId = dto.itemSlug
+      ? (await this.findItemBySlug(projectSlug, dto.itemSlug)).id
+      : null;
+
+    // Không truyền `order` thì xếp ảnh mới xuống cuối thư viện.
+    const order = dto.order ?? (await this.nextGalleryOrder(project.id));
+
+    return this.prisma.projectGalleryImage.create({
+      data: {
+        projectId: project.id,
+        projectItemId,
+        url: dto.url,
+        caption: dto.caption as unknown as Prisma.InputJsonValue,
+        order,
+      },
+    });
+  }
+
+  async updateGalleryImage(
+    projectSlug: string,
+    imageId: string,
+    dto: UpdateGalleryImageDto,
+  ) {
+    const image = await this.findGalleryImage(projectSlug, imageId);
+    const projectItemId =
+      dto.itemSlug === undefined
+        ? undefined
+        : dto.itemSlug === ''
+          ? null // chuỗi rỗng = gỡ ảnh khỏi hạng mục, trả về cấp dự án
+          : (await this.findItemBySlug(projectSlug, dto.itemSlug)).id;
+
+    return this.prisma.projectGalleryImage.update({
+      where: { id: image.id },
+      data: {
+        url: dto.url,
+        caption: dto.caption as unknown as Prisma.InputJsonValue | undefined,
+        order: dto.order,
+        projectItemId,
+      },
+    });
+  }
+
+  async removeGalleryImage(projectSlug: string, imageId: string) {
+    const image = await this.findGalleryImage(projectSlug, imageId);
+    await this.prisma.projectGalleryImage.delete({ where: { id: image.id } });
+    return { deleted: true };
+  }
+
+  /**
+   * Sắp xếp lại thư viện theo danh sách id truyền lên (kéo-thả ở Admin CMS).
+   * Chạy trong transaction: thứ tự hiển thị không được rơi vào trạng thái nửa vời.
+   */
+  async reorderGallery(projectSlug: string, imageIds: string[]) {
+    const project = await this.findBySlug(projectSlug);
+    const owned = await this.prisma.projectGalleryImage.findMany({
+      where: { projectId: project.id },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((image) => image.id));
+
+    const unknownId = imageIds.find((id) => !ownedIds.has(id));
+    if (unknownId) {
+      throw new NotFoundException(
+        `Ảnh ${unknownId} không thuộc dự án ${projectSlug}`,
+      );
+    }
+    if (imageIds.length !== owned.length) {
+      throw new ConflictException(
+        `Cần đủ ${owned.length} ảnh của dự án để sắp xếp lại, nhận được ${imageIds.length}`,
+      );
+    }
+
+    await this.prisma.$transaction(
+      imageIds.map((id, order) =>
+        this.prisma.projectGalleryImage.update({
+          where: { id },
+          data: { order },
+        }),
+      ),
+    );
+    return this.findGallery(projectSlug);
+  }
+
+  /** Ảnh phải thuộc đúng dự án trên URL — chặn sửa/xóa chéo dự án. */
+  private async findGalleryImage(projectSlug: string, imageId: string) {
+    const project = await this.findBySlug(projectSlug);
+    const image = await this.prisma.projectGalleryImage.findFirst({
+      where: { id: imageId, projectId: project.id },
+    });
+    if (!image) throw new NotFoundException('Không tìm thấy ảnh trong dự án');
+    return image;
+  }
+
+  private async nextGalleryOrder(projectId: string): Promise<number> {
+    const last = await this.prisma.projectGalleryImage.findFirst({
+      where: { projectId },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    });
+    return last ? last.order + 1 : 0;
   }
 }

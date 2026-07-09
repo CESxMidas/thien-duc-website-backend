@@ -8,14 +8,17 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { ReorderGalleryDto } from './dto/reorder-gallery.dto';
+import { UpdateGalleryImageDto } from './dto/update-gallery-image.dto';
 import { UpdateProjectItemDto } from './dto/update-project-item.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectsService } from './projects.service';
@@ -25,14 +28,35 @@ import { ProjectsService } from './projects.service';
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
+  @ApiOperation({ summary: 'Danh sách dự án đã xuất bản (website công khai).' })
   @Get()
   findAll() {
     return this.projectsService.findAll(true);
   }
 
+  // Phải đứng trước `@Get(':slug')`, nếu không "admin" bị bắt làm slug dự án.
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Danh sách đầy đủ cho Admin CMS — gồm cả nháp và chờ duyệt.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin')
+  findAllForAdmin() {
+    return this.projectsService.findAll(false);
+  }
+
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
     return this.projectsService.findBySlug(slug);
+  }
+
+  @ApiOperation({
+    summary: 'Thư viện ảnh của dự án, xếp theo thứ tự hiển thị.',
+  })
+  @Get(':slug/gallery')
+  findGallery(@Param('slug') slug: string) {
+    return this.projectsService.findGallery(slug);
   }
 
   @Get(':slug/:itemSlug')
@@ -57,6 +81,7 @@ export class ProjectsController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Duyệt/trả lại nội dung — chỉ Admin trở lên.' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/status')
@@ -74,6 +99,8 @@ export class ProjectsController {
   remove(@Param('slug') slug: string) {
     return this.projectsService.remove(slug);
   }
+
+  /* ----------------------------- Hạng mục con ----------------------------- */
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -101,5 +128,54 @@ export class ProjectsController {
   @Delete(':slug/items/:itemSlug')
   removeItem(@Param('slug') slug: string, @Param('itemSlug') itemSlug: string) {
     return this.projectsService.removeItem(slug, itemSlug);
+  }
+
+  /* ------------------------------- Thư viện ảnh ---------------------------- */
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Thêm ảnh vào thư viện. Truyền `itemSlug` để gắn ảnh vào một hạng mục con.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post(':slug/gallery')
+  addGalleryImage(
+    @Param('slug') slug: string,
+    @Body() dto: CreateGalleryImageDto,
+  ) {
+    return this.projectsService.addGalleryImage(slug, dto);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sắp xếp lại toàn bộ thư viện ảnh của dự án.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch(':slug/gallery/reorder')
+  reorderGallery(@Param('slug') slug: string, @Body() dto: ReorderGalleryDto) {
+    return this.projectsService.reorderGallery(slug, dto.imageIds);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch(':slug/gallery/:imageId')
+  updateGalleryImage(
+    @Param('slug') slug: string,
+    @Param('imageId') imageId: string,
+    @Body() dto: UpdateGalleryImageDto,
+  ) {
+    return this.projectsService.updateGalleryImage(slug, imageId, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Delete(':slug/gallery/:imageId')
+  removeGalleryImage(
+    @Param('slug') slug: string,
+    @Param('imageId') imageId: string,
+  ) {
+    return this.projectsService.removeGalleryImage(slug, imageId);
   }
 }

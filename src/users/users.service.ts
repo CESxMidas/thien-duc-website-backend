@@ -23,6 +23,17 @@ const PUBLIC_FIELDS = {
   createdAt: true,
 } as const;
 
+/**
+ * Field bổ sung cho màn hình xem chi tiết một tài khoản (GET /users/:id):
+ * thêm thời điểm cập nhật và hạn khóa tạm do đăng nhập sai — vẫn không bao
+ * giờ gồm `passwordHash`.
+ */
+const DETAIL_FIELDS = {
+  ...PUBLIC_FIELDS,
+  updatedAt: true,
+  lockedUntil: true,
+} as const;
+
 /** Mã lỗi Prisma khi vi phạm ràng buộc duy nhất (ở đây là `email`). */
 const PRISMA_UNIQUE_VIOLATION = 'P2002';
 
@@ -47,7 +58,7 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: PUBLIC_FIELDS,
+      select: DETAIL_FIELDS,
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     return user;
@@ -110,7 +121,7 @@ export class UsersService {
       updated = await this.prisma.user.update({
         where: { id },
         data,
-        select: PUBLIC_FIELDS,
+        select: DETAIL_FIELDS,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {

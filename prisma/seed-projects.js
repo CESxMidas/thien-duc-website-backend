@@ -15,6 +15,12 @@ const { Client } = require('pg');
 /** Field song ngữ: chỉ có tiếng Việt, bản tiếng Anh bổ sung ở Sprint 4. */
 const vi = (text) => ({ vi: text });
 
+/**
+ * `highlights` là **mảng field song ngữ**, không phải mảng chuỗi — mapper của
+ * frontend (`src/lib/api/mappers.ts`) đọc `.vi` của từng phần tử.
+ */
+const localizedList = (texts) => JSON.stringify((texts ?? []).map(vi));
+
 const projects = [
   {
     slug: 'khu-do-thi-hung-phu',
@@ -51,6 +57,75 @@ const projects = [
       '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-01.jpg',
       '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-02.jpg',
     ],
+    gallerySections: [
+      {
+        title: 'Khách sạn',
+        description:
+          'Không gian lưu trú Cannes Hotel với phòng nghỉ hiện đại và tiện nghi đồng bộ trong khu đô thị.',
+        images: [
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-exterior-01.jpg',
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-double-01.jpg',
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-01.jpg',
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-bedroom-twin-02.jpg',
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-living-room-01.jpg',
+          '/images/projects/hung-phu/hotel/hung-phu-hotel-living-room-02.jpg',
+        ],
+      },
+      {
+        title: 'Chung cư Fancy Tower',
+        description:
+          'Tòa căn hộ cao cấp 19 tầng với tiện ích nội khu và không gian sống hiện đại.',
+        images: [
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-day-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-evening-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-plaza-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-plaza-02.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-01.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-02.jpg',
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-amenity-pool-03.jpg',
+        ],
+      },
+    ],
+    mapLocation: {
+      image: '/images/projects/hung-phu/location/hung-phu-location-map-base.png',
+      googleMapsUrl:
+        'https://www.google.com/maps/search/?api=1&query=Kh%C3%B9+%C4%91%C3%B4+th%E1%BB%8B+H%C6%B0ng+Ph%C3%BA+B%E1%BA%BFn+Tre',
+      heading: 'Tọa lạc tại trung tâm nổi bật của thành phố Bến Tre',
+      description:
+        'Phong cách sống sang trọng đi đôi với hệ thống các tiện ích công cộng hiện đại, khu đô thị hứa hẹn mang đến cho thành phố Bến Tre một diện mạo mới.',
+      address: 'Phường Phú Tân, thành phố Bến Tre, tỉnh Bến Tre',
+      markerLeft: 65,
+      markerTop: 27,
+      labels: [
+        { text: 'Hướng đi chợ Lách', left: 22, top: 9, kind: 'direction' },
+        { text: 'Hướng đi cầu Rạch Miễu TP.HCM', left: 44, top: 12, kind: 'direction' },
+        { text: 'Hướng đi Tỉnh Lộ 886', left: 83, top: 9, kind: 'direction' },
+        { text: 'Hướng đi cầu Hàm Lương', left: 24, top: 66, kind: 'direction' },
+        { text: 'Tỉnh lộ 887', left: 35, top: 17, kind: 'road' },
+        { text: 'QL.60', left: 49, top: 14, kind: 'road' },
+        { text: 'Ngã tư Tân Thành', left: 47, top: 28, kind: 'road' },
+        { text: 'Ngã tư Phú Khương', left: 56, top: 42, kind: 'road' },
+        { text: 'D.Đồng Văn Cống', left: 43, top: 40, kind: 'road' },
+        { text: 'D.Nguyễn Thị Định', left: 74, top: 33, kind: 'road' },
+        { text: 'D.Đoàn Hoàng Minh', left: 49, top: 57, kind: 'road' },
+        { text: 'D.Đồng Khởi', left: 67, top: 52, kind: 'road' },
+        { text: 'D.Nguyễn Huệ', left: 80, top: 38, kind: 'road' },
+        { text: 'D.Nguyễn Đình Chiểu', left: 84, top: 71, kind: 'road' },
+        { text: 'D.Hùng Vương', left: 45, top: 90, kind: 'road' },
+        { text: 'PHƯỜNG PHÚ TÂN', left: 60, top: 20, kind: 'area' },
+        { text: 'PHƯỜNG PHÚ KHƯƠNG', left: 84, top: 47, kind: 'area' },
+        { text: 'Trường Cao Đẳng Bến Tre CS2', left: 50, top: 14, kind: 'place' },
+        { text: 'Trường Cao Đẳng Bến Tre', left: 30, top: 27, kind: 'place' },
+        { text: 'Trường CĐ Công Nghệ Đông Khởi', left: 38, top: 31, kind: 'place' },
+        { text: 'Bến xe Bến Tre', left: 57, top: 24, kind: 'place' },
+        { text: 'Bến xe Minh Tâm', left: 86, top: 30, kind: 'place' },
+        { text: 'BV Đa Khoa Nguyễn Đình Chiểu', left: 49, top: 75, kind: 'place' },
+        { text: 'Khu Trung Tâm Hành Chính', left: 63, top: 70, kind: 'place' },
+        { text: 'TT Thương Mại', left: 65, top: 84, kind: 'place' },
+        { text: 'ĐL Hàm Luông', left: 50, top: 89, kind: 'place' },
+        { text: 'SÔNG BẾN TRE', left: 80, top: 83, kind: 'area' },
+      ],
+    },
     items: [
       {
         slug: 'fancy-tower',
@@ -219,9 +294,10 @@ async function main() {
     const res = await client.query(
       `INSERT INTO projects
          (id, slug, title, summary, description, status, content_status, location,
-          image, gallery, category, highlights, quick_facts, "order", created_at, updated_at)
+          image, gallery, category, highlights, quick_facts, gallery_sections,
+          map_location, "order", created_at, updated_at)
        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5::"ProjectStatus", 'PUBLISHED', $6,
-               $7, $8, $9, $10, $11, $12, now(), now())
+               $7, $8, $9, $10, $11, $12, $13, $14, now(), now())
        ON CONFLICT (slug) DO UPDATE
          SET title = EXCLUDED.title,
              summary = EXCLUDED.summary,
@@ -233,6 +309,8 @@ async function main() {
              category = EXCLUDED.category,
              highlights = EXCLUDED.highlights,
              quick_facts = EXCLUDED.quick_facts,
+             gallery_sections = EXCLUDED.gallery_sections,
+             map_location = EXCLUDED.map_location,
              "order" = EXCLUDED."order",
              updated_at = now()
        RETURNING id`,
@@ -246,8 +324,10 @@ async function main() {
         project.image ?? null,
         project.gallery ?? [],
         project.category ?? null,
-        JSON.stringify(project.highlights ?? []),
+        localizedList(project.highlights),
         JSON.stringify(project.quickFacts ?? []),
+        project.gallerySections ? JSON.stringify(project.gallerySections) : null,
+        project.mapLocation ? JSON.stringify(project.mapLocation) : null,
         order,
       ],
     );
@@ -263,8 +343,8 @@ async function main() {
       const itemRes = await client.query(
         `INSERT INTO project_items
            (id, project_id, slug, title, summary, description, status, image,
-            highlights, quick_facts, "order", created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::"ProjectStatus", $7, $8, $9, $10, now(), now())
+            highlights, quick_facts, gallery_sections, "order", created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6::"ProjectStatus", $7, $8, $9, $10, $11, now(), now())
          ON CONFLICT (project_id, slug) DO UPDATE
            SET title = EXCLUDED.title,
                summary = EXCLUDED.summary,
@@ -273,6 +353,7 @@ async function main() {
                image = EXCLUDED.image,
                highlights = EXCLUDED.highlights,
                quick_facts = EXCLUDED.quick_facts,
+               gallery_sections = EXCLUDED.gallery_sections,
                "order" = EXCLUDED."order",
                updated_at = now()
          RETURNING id`,
@@ -284,8 +365,9 @@ async function main() {
           item.description ? vi(item.description) : null,
           item.status ?? null,
           item.image ?? null,
-          JSON.stringify(item.highlights ?? []),
+          localizedList(item.highlights),
           JSON.stringify(item.quickFacts ?? []),
+          item.gallerySections ? JSON.stringify(item.gallerySections) : null,
           itemOrder,
         ],
       );

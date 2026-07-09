@@ -14,7 +14,9 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
+import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
 import { UpdateNewsPostDto } from './dto/update-news-post.dto';
 import { NewsService } from './news.service';
 
@@ -23,6 +25,58 @@ import { NewsService } from './news.service';
 export class NewsController {
   constructor(private readonly newsService: NewsService) {}
 
+  // Các route tĩnh (`categories`, `admin`) phải khai báo trước `:slug`,
+  // nếu không Nest sẽ khớp chúng vào tham số slug.
+
+  @Get('categories')
+  findAllCategories() {
+    return this.newsService.findAllCategories();
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('categories')
+  createCategory(@Body() dto: CreateNewsCategoryDto) {
+    return this.newsService.createCategory(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('categories/:slug')
+  updateCategory(
+    @Param('slug') slug: string,
+    @Body() dto: UpdateNewsCategoryDto,
+  ) {
+    return this.newsService.updateCategory(slug, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Delete('categories/:slug')
+  removeCategory(@Param('slug') slug: string) {
+    return this.newsService.removeCategory(slug);
+  }
+
+  /** Danh sách cho Admin CMS: kèm cả bài nháp và bài chờ duyệt. */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin')
+  findAllForAdmin() {
+    return this.newsService.findAll(false);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin/:slug')
+  findOneForAdmin(@Param('slug') slug: string) {
+    return this.newsService.findBySlug(slug);
+  }
+
   @Get()
   findAll() {
     return this.newsService.findAll(true);
@@ -30,7 +84,7 @@ export class NewsController {
 
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
-    return this.newsService.findBySlug(slug);
+    return this.newsService.findBySlug(slug, true);
   }
 
   @ApiBearerAuth()

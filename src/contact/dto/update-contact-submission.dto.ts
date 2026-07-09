@@ -3,9 +3,11 @@ import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { SubmissionStatus } from '../../../generated/prisma/client';
 
 export class UpdateContactSubmissionDto {
-  @ApiProperty({ enum: SubmissionStatus })
+  /** Optional để `PATCH` chỉ ghi chú nội bộ, không phải gửi kèm trạng thái. */
+  @ApiProperty({ enum: SubmissionStatus, required: false })
+  @IsOptional()
   @IsEnum(SubmissionStatus)
-  status!: SubmissionStatus;
+  status?: SubmissionStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()

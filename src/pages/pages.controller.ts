@@ -23,14 +23,33 @@ import { PagesService } from './pages.service';
 export class PagesController {
   constructor(private readonly pagesService: PagesService) {}
 
+  // Route tĩnh `admin` phải đứng trước `:slug`, nếu không Nest khớp nó vào slug.
+
+  /** Danh sách cho Admin CMS: kèm cả trang nháp và trang chờ duyệt. */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin')
+  findAllForAdmin() {
+    return this.pagesService.findAll(false);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin/:slug')
+  findOneForAdmin(@Param('slug') slug: string) {
+    return this.pagesService.findBySlug(slug);
+  }
+
   @Get()
   findAll() {
-    return this.pagesService.findAll();
+    return this.pagesService.findAll(true);
   }
 
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
-    return this.pagesService.findBySlug(slug);
+    return this.pagesService.findBySlug(slug, true);
   }
 
   @ApiBearerAuth()

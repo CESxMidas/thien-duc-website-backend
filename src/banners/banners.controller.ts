@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BannersService } from './banners.service';
 import { CreateBannerDto } from './dto/create-banner.dto';
+import { ReorderBannersDto } from './dto/reorder-banners.dto';
 import { UpdateBannerDto } from './dto/update-banner.dto';
 
 @ApiTags('banners')
@@ -22,17 +23,38 @@ import { UpdateBannerDto } from './dto/update-banner.dto';
 export class BannersController {
   constructor(private readonly bannersService: BannersService) {}
 
+  /** Trang chủ chỉ lấy banner đang bật. */
   @Get()
   findAll() {
     return this.bannersService.findAll(true);
   }
 
+  // Các route tĩnh (`admin`, `reorder`) phải khai báo trước `:id`,
+  // nếu không Nest sẽ khớp chúng vào tham số id.
+
+  /** Danh sách cho Admin CMS: kèm cả banner đã tắt. */
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
-  @Get(':id/admin')
+  @Get('admin')
+  findAllForAdmin() {
+    return this.bannersService.findAll(false);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin/:id')
   findOne(@Param('id') id: string) {
     return this.bannersService.findOne(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('reorder')
+  reorder(@Body() dto: ReorderBannersDto) {
+    return this.bannersService.reorder(dto.bannerIds);
   }
 
   @ApiBearerAuth()

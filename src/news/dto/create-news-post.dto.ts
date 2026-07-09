@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
-  IsObject,
   IsOptional,
   IsString,
   ValidateNested,
@@ -24,10 +24,16 @@ export class CreateNewsPostDto {
   @Type(() => TranslatedTextDto)
   summary!: TranslatedTextDto;
 
-  @ApiProperty({ required: false })
+  /**
+   * Nội dung bài viết là **mảng đoạn văn**, mỗi đoạn là một field song ngữ —
+   * khớp `NewsPostDto.content: LocalizedText[]` mà frontend đang đọc.
+   */
+  @ApiProperty({ type: [TranslatedTextDto], required: false })
   @IsOptional()
-  @IsObject()
-  content?: Record<string, unknown>;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TranslatedTextDto)
+  content?: TranslatedTextDto[];
 
   @ApiProperty({ required: false })
   @IsOptional()

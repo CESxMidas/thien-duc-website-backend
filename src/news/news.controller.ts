@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
@@ -18,12 +18,16 @@ import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
 import { UpdateNewsPostDto } from './dto/update-news-post.dto';
+import { NewsSchedulerService } from './news-scheduler.service';
 import { NewsService } from './news.service';
 
 @ApiTags('news')
 @Controller('news')
 export class NewsController {
-  constructor(private readonly newsService: NewsService) {}
+  constructor(
+    private readonly newsService: NewsService,
+    private readonly newsSchedulerService: NewsSchedulerService,
+  ) {}
 
   // Các route tĩnh (`categories`, `admin`) phải khai báo trước `:slug`,
   // nếu không Nest sẽ khớp chúng vào tham số slug.
@@ -31,6 +35,23 @@ export class NewsController {
   @Get('categories')
   findAllCategories() {
     return this.newsService.findAllCategories();
+  }
+
+  /**
+   * Kích hoạt thủ công lượt đăng theo lịch. Cron nội bộ chỉ chạy khi tiến trình
+   * còn sống — Render free tier ngủ sau 15 phút không có request, nên cần một
+   * cron ngoài (UptimeRobot, cron-job.org) gọi route này để bài đúng hạn vẫn lên.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Đăng ngay các bài đã tới hạn `scheduledAt` (ED-08).',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('publish-scheduled')
+  async publishScheduled() {
+    const published = await this.newsSchedulerService.publishDuePosts();
+    return { published: published.length, posts: published };
   }
 
   @ApiBearerAuth()

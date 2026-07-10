@@ -43,7 +43,12 @@ export class ProjectsService {
     });
   }
 
-  async findBySlug(slug: string) {
+  /**
+   * `publishedOnly` bắt buộc bật ở route công khai — nếu không, dự án nháp và
+   * dự án chờ duyệt đọc được từ bên ngoài chỉ bằng cách đoán slug (cùng lỗi đã
+   * vá ở `news` và `pages`).
+   */
+  async findBySlug(slug: string, publishedOnly = false) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
       include: {
@@ -51,12 +56,21 @@ export class ProjectsService {
         galleryImages: { orderBy: BY_ORDER },
       },
     });
-    if (!project) throw new NotFoundException('Không tìm thấy dự án');
+    if (
+      !project ||
+      (publishedOnly && project.contentStatus !== ContentStatus.PUBLISHED)
+    ) {
+      throw new NotFoundException('Không tìm thấy dự án');
+    }
     return project;
   }
 
-  async findItemBySlug(projectSlug: string, itemSlug: string) {
-    const project = await this.findBySlug(projectSlug);
+  async findItemBySlug(
+    projectSlug: string,
+    itemSlug: string,
+    publishedOnly = false,
+  ) {
+    const project = await this.findBySlug(projectSlug, publishedOnly);
     const item = await this.prisma.projectItem.findFirst({
       where: { projectId: project.id, slug: itemSlug },
       include: { galleryImages: { orderBy: BY_ORDER } },
@@ -158,8 +172,8 @@ export class ProjectsService {
 
   /* ------------------------------- Thư viện ảnh ---------------------------- */
 
-  async findGallery(projectSlug: string) {
-    const project = await this.findBySlug(projectSlug);
+  async findGallery(projectSlug: string, publishedOnly = false) {
+    const project = await this.findBySlug(projectSlug, publishedOnly);
     return this.prisma.projectGalleryImage.findMany({
       where: { projectId: project.id },
       orderBy: BY_ORDER,

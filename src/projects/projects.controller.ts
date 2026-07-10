@@ -46,9 +46,33 @@ export class ProjectsController {
     return this.projectsService.findAll(false);
   }
 
+  // `admin/:slug` phải đứng trước `:slug/:itemSlug`, nếu không "admin" bị khớp
+  // vào slug dự án và phần còn lại thành slug hạng mục.
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Chi tiết dự án cho Admin CMS — gồm cả nháp.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin/:slug')
+  findOneForAdmin(@Param('slug') slug: string) {
+    return this.projectsService.findBySlug(slug);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Thư viện ảnh dự án cho Admin CMS — gồm cả nháp.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('admin/:slug/gallery')
+  findGalleryForAdmin(@Param('slug') slug: string) {
+    return this.projectsService.findGallery(slug);
+  }
+
+  // Ba route dưới đây công khai → luôn truyền `publishedOnly = true`.
+
+  @ApiOperation({ summary: 'Chi tiết một dự án đã xuất bản.' })
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
-    return this.projectsService.findBySlug(slug);
+    return this.projectsService.findBySlug(slug, true);
   }
 
   @ApiOperation({
@@ -56,12 +80,13 @@ export class ProjectsController {
   })
   @Get(':slug/gallery')
   findGallery(@Param('slug') slug: string) {
-    return this.projectsService.findGallery(slug);
+    return this.projectsService.findGallery(slug, true);
   }
 
+  @ApiOperation({ summary: 'Chi tiết hạng mục thuộc dự án đã xuất bản.' })
   @Get(':slug/:itemSlug')
   findItem(@Param('slug') slug: string, @Param('itemSlug') itemSlug: string) {
-    return this.projectsService.findItemBySlug(slug, itemSlug);
+    return this.projectsService.findItemBySlug(slug, itemSlug, true);
   }
 
   @ApiBearerAuth()

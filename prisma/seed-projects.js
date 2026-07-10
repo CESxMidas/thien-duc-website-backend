@@ -28,7 +28,10 @@ const projects = [
     summary:
       'Khu đô thị 11,25 ha tại trung tâm TP. Bến Tre do Thiên Đức làm chủ đầu tư, gồm 330 căn nhà ở thấp tầng và tòa căn hộ Fancy Tower.',
     description:
-      'Khu đô thị Hưng Phú tọa lạc mặt tiền đường Nguyễn Thị Định, Phường Phú Tân, TP. Bến Tre, trên khu đất hậu cần Tỉnh đội cũ. Dự án có sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật. Hạ tầng, đường nội khu và các phân khu nhà phố thấp tầng đã hoàn thiện, đa số cư dân đã dọn vào sinh sống ổn định. Trung tâm thương mại Hưng Phú Mall và nhà trẻ nội khu đang trong giai đoạn hoàn thiện cuối cùng.',
+      'Khu đô thị Hưng Phú tọa lạc mặt tiền đường Nguyễn Thị Định, Phường Phú Tân, TP. Bến Tre, trên khu đất hậu cần Tỉnh đội cũ. Dự án có sổ hồng lâu dài và đã nghiệm thu hạ tầng kỹ thuật. Hạ tầng, đường nội khu, các phân khu nhà phố thấp tầng và tòa căn hộ Fancy Tower đều đã bàn giao, cư dân sinh sống ổn định. Trung tâm thương mại Hưng Phú Mall và nhà trẻ nội khu đang hoàn thiện giai đoạn cuối để đưa vào khai thác.',
+    // Toàn khu đô thị đã bàn giao. Hạng mục `hung-phu-mall` vẫn giữ
+    // `DANG_THI_CONG` — trung tâm thương mại chưa vận hành, ghi "đã bàn giao"
+    // là sai sự thật. Dự án bàn giao mà một tiện ích còn hoàn thiện là bình thường.
     status: 'DA_BAN_GIAO',
     // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
     location: 'Bến Tre',

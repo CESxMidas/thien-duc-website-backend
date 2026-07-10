@@ -63,6 +63,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('❌ Seed thất bại:', error instanceof Error ? error.message : error);
+  console.error(
+    '❌ Seed thất bại:',
+    error instanceof Error ? error.message : error,
+  );
   process.exit(1);
 });

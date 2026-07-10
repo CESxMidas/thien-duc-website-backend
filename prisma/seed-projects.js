@@ -29,10 +29,12 @@ const projects = [
       'Khu đô thị 11,25 ha tại trung tâm TP. Bến Tre do Thiên Đức làm chủ đầu tư, gồm 330 căn nhà ở thấp tầng và tòa căn hộ Fancy Tower.',
     description:
       'Khu đô thị Hưng Phú tọa lạc mặt tiền đường Nguyễn Thị Định, Phường Phú Tân, TP. Bến Tre, trên khu đất hậu cần Tỉnh đội cũ. Dự án có sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật. Hạ tầng, đường nội khu và các phân khu nhà phố thấp tầng đã hoàn thiện, đa số cư dân đã dọn vào sinh sống ổn định. Trung tâm thương mại Hưng Phú Mall và nhà trẻ nội khu đang trong giai đoạn hoàn thiện cuối cùng.',
-    status: 'DANG_THI_CONG',
-    location: 'Phường Phú Tân, TP. Bến Tre, tỉnh Bến Tre',
+    status: 'DA_BAN_GIAO',
+    // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
+    location: 'Bến Tre',
     category: 'Khu đô thị',
-    image: '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
+    image:
+      '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
     highlights: [
       'Mặt tiền đường Nguyễn Thị Định, ngay khu trung tâm TP. Bến Tre.',
       'Sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật.',
@@ -42,9 +44,18 @@ const projects = [
     quickFacts: [
       { label: 'Chủ đầu tư', value: 'Công ty TNHH ĐT - XD - TM Thiên Đức' },
       { label: 'Tổng diện tích', value: '112.521 m² (11,25 ha)' },
-      { label: 'Sản phẩm thấp tầng', value: '330 căn nhà phố liền kề, shophouse, biệt thự' },
-      { label: 'Căn hộ', value: '196 căn (Fancy Tower — 19 tầng nổi, 1 tầng hầm)' },
-      { label: 'Pháp lý', value: 'Sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật' },
+      {
+        label: 'Sản phẩm thấp tầng',
+        value: '330 căn nhà phố liền kề, shophouse, biệt thự',
+      },
+      {
+        label: 'Căn hộ',
+        value: '196 căn (Fancy Tower — 19 tầng nổi, 1 tầng hầm)',
+      },
+      {
+        label: 'Pháp lý',
+        value: 'Sổ hồng lâu dài, đã nghiệm thu hạ tầng kỹ thuật',
+      },
     ],
     gallery: [
       '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
@@ -87,7 +98,8 @@ const projects = [
       },
     ],
     mapLocation: {
-      image: '/images/projects/hung-phu/location/hung-phu-location-map-base.png',
+      image:
+        '/images/projects/hung-phu/location/hung-phu-location-map-base.png',
       googleMapsUrl:
         'https://www.google.com/maps/search/?api=1&query=Kh%C3%B9+%C4%91%C3%B4+th%E1%BB%8B+H%C6%B0ng+Ph%C3%BA+B%E1%BA%BFn+Tre',
       heading: 'Tọa lạc tại trung tâm nổi bật của thành phố Bến Tre',
@@ -98,9 +110,19 @@ const projects = [
       markerTop: 27,
       labels: [
         { text: 'Hướng đi chợ Lách', left: 22, top: 9, kind: 'direction' },
-        { text: 'Hướng đi cầu Rạch Miễu TP.HCM', left: 44, top: 12, kind: 'direction' },
+        {
+          text: 'Hướng đi cầu Rạch Miễu TP.HCM',
+          left: 44,
+          top: 12,
+          kind: 'direction',
+        },
         { text: 'Hướng đi Tỉnh Lộ 886', left: 83, top: 9, kind: 'direction' },
-        { text: 'Hướng đi cầu Hàm Lương', left: 24, top: 66, kind: 'direction' },
+        {
+          text: 'Hướng đi cầu Hàm Lương',
+          left: 24,
+          top: 66,
+          kind: 'direction',
+        },
         { text: 'Tỉnh lộ 887', left: 35, top: 17, kind: 'road' },
         { text: 'QL.60', left: 49, top: 14, kind: 'road' },
         { text: 'Ngã tư Tân Thành', left: 47, top: 28, kind: 'road' },
@@ -114,12 +136,27 @@ const projects = [
         { text: 'D.Hùng Vương', left: 45, top: 90, kind: 'road' },
         { text: 'PHƯỜNG PHÚ TÂN', left: 60, top: 20, kind: 'area' },
         { text: 'PHƯỜNG PHÚ KHƯƠNG', left: 84, top: 47, kind: 'area' },
-        { text: 'Trường Cao Đẳng Bến Tre CS2', left: 50, top: 14, kind: 'place' },
+        {
+          text: 'Trường Cao Đẳng Bến Tre CS2',
+          left: 50,
+          top: 14,
+          kind: 'place',
+        },
         { text: 'Trường Cao Đẳng Bến Tre', left: 30, top: 27, kind: 'place' },
-        { text: 'Trường CĐ Công Nghệ Đông Khởi', left: 38, top: 31, kind: 'place' },
+        {
+          text: 'Trường CĐ Công Nghệ Đông Khởi',
+          left: 38,
+          top: 31,
+          kind: 'place',
+        },
         { text: 'Bến xe Bến Tre', left: 57, top: 24, kind: 'place' },
         { text: 'Bến xe Minh Tâm', left: 86, top: 30, kind: 'place' },
-        { text: 'BV Đa Khoa Nguyễn Đình Chiểu', left: 49, top: 75, kind: 'place' },
+        {
+          text: 'BV Đa Khoa Nguyễn Đình Chiểu',
+          left: 49,
+          top: 75,
+          kind: 'place',
+        },
         { text: 'Khu Trung Tâm Hành Chính', left: 63, top: 70, kind: 'place' },
         { text: 'TT Thương Mại', left: 65, top: 84, kind: 'place' },
         { text: 'ĐL Hàm Luông', left: 50, top: 89, kind: 'place' },
@@ -135,7 +172,8 @@ const projects = [
         description:
           'Fancy Tower đã được Sở Xây dựng nghiệm thu hoàn thành công trình và sẵn sàng cấp sổ hồng cho cư dân. Tòa nhà đã hoàn thiện thi công, bàn giao và đưa vào vận hành.',
         status: 'DA_BAN_GIAO',
-        image: '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-day-01.jpg',
+        image:
+          '/images/projects/hung-phu/fancy-tower/fancy-tower-exterior-day-01.jpg',
         highlights: [
           '19 tầng nổi, 1 tầng hầm, 196 căn hộ.',
           'Đã nghiệm thu hoàn thành công trình, sẵn sàng cấp sổ hồng.',
@@ -184,15 +222,21 @@ const projects = [
     description:
       'La Bonita nằm tại số 6-8 đường Nguyễn Gia Trí (đường D2 cũ), Phường 25, Quận Bình Thạnh. Tòa nhà đã hoàn thiện xây dựng và bàn giao từ năm 2018. Tầng 1-4 là trung tâm thương mại, officetel và văn phòng cho thuê; tầng 5-14 là khu căn hộ.',
     status: 'DA_BAN_GIAO',
-    location: 'Số 6-8 Nguyễn Gia Trí, Phường 25, Quận Bình Thạnh, TP.HCM',
+    // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
+    location: 'Bình Thạnh, TP.HCM',
     category: 'Chung cư',
-    image: '/images/projects/la-bonita/building/la-bonita-building-render-01.jpg',
+    image:
+      '/images/projects/la-bonita/building/la-bonita-building-render-01.jpg',
     highlights: [
       'Kết nối trực tiếp ra đường Điện Biên Phủ và Xô Viết Nghệ Tĩnh, 5-10 phút vào trung tâm Quận 1.',
       'Mật độ thoáng: chỉ khoảng 6 căn mỗi sàn.',
       'Sát các trường đại học lớn (Hutech, Ngoại Thương, Giao Thông Vận Tải).',
     ],
     quickFacts: [
+      {
+        label: 'Địa chỉ',
+        value: 'Số 6-8 Nguyễn Gia Trí, Phường 25, Quận Bình Thạnh, TP.HCM',
+      },
       { label: 'Diện tích đất', value: '1.374 m²' },
       { label: 'Diện tích sàn xây dựng', value: '11.654 m²' },
       { label: 'Quy mô', value: '1 block, 14 tầng nổi, 2 tầng hầm' },
@@ -213,7 +257,8 @@ const projects = [
     description:
       'Silver Sea Tower tọa lạc ngay tuyến đường Ba Cu sầm uất, sát cạnh UBND TP. Vũng Tàu, cách Bãi Trước khoảng 500m nên sở hữu tầm nhìn hướng biển ở cả hai mặt tòa nhà. Dự án đã hoàn thiện, bàn giao và đưa vào vận hành đồng bộ cả khối căn hộ lẫn khối văn phòng, thương mại.',
     status: 'DA_BAN_GIAO',
-    location: 'Số 47 Ba Cu, Phường 1, TP. Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu',
+    // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
+    location: 'TP. Vũng Tàu',
     category: 'Chung cư',
     image: '/images/projects/vung-tau/vung-tau-center-exterior-01.webp',
     highlights: [
@@ -222,10 +267,17 @@ const projects = [
       'Sân vườn trên cao và bãi đáp trực thăng phục vụ công tác PCCC tại tầng áp mái.',
     ],
     quickFacts: [
+      {
+        label: 'Địa chỉ',
+        value: 'Số 47 Ba Cu, Phường 1, TP. Vũng Tàu, tỉnh Bà Rịa - Vũng Tàu',
+      },
       { label: 'Diện tích khu đất', value: '1.490,3 m²' },
       { label: 'Quy mô', value: '1 block, 18 tầng nổi, 2 tầng hầm' },
       { label: 'Số căn hộ', value: '80 căn (101 - 162 m², 2-3 phòng ngủ)' },
-      { label: 'Chủ đầu tư', value: 'CTCP Địa ốc Nam Gia phối hợp CTCP Thương mại Tổng hợp BR-VT' },
+      {
+        label: 'Chủ đầu tư',
+        value: 'CTCP Địa ốc Nam Gia phối hợp CTCP Thương mại Tổng hợp BR-VT',
+      },
       { label: 'Pháp lý', value: 'Sổ hồng lâu dài từng căn' },
     ],
     gallery: [
@@ -240,17 +292,24 @@ const projects = [
     summary:
       'Tòa nhà 23 tầng tại số 9 Phạm Phú Thứ, Quận Tân Bình, TP.HCM, gồm khối chợ sỉ phụ liệu dệt may và khu căn hộ.',
     description:
-      'Bảy Hiền Tower cách Ngã tư Bảy Hiền khoảng 300m, sát vách chợ sỉ Tân Bình. Khối căn hộ đã hoàn thiện thô và bàn giao, hơn 150 hộ dân đã sinh sống ổn định. Khối thương mại 5 tầng đã xây xong phần thô nhưng chưa đưa vào khai thác. Dự án đang được UBND TP.HCM xem xét gỡ vướng thủ tục.',
-    status: 'DANG_THI_CONG',
-    location: 'Số 9 Phạm Phú Thứ, Phường 11, Quận Tân Bình, TP.HCM',
+      'Bảy Hiền Tower cách Ngã tư Bảy Hiền khoảng 300m, sát vách chợ sỉ Tân Bình. Khối căn hộ đã hoàn thiện và bàn giao, hơn 150 hộ dân đang sinh sống ổn định. Khối thương mại 5 tầng đã xây xong phần thô và đang chờ hoàn tất thủ tục để đưa vào khai thác.',
+    // Khối căn hộ đã bàn giao và có cư dân (câu 2 trong CAU-HOI-CAN-XAC-NHAN.md);
+    // chỉ khối thương mại còn chờ. Trạng thái cũ `DANG_THI_CONG` gây hiểu nhầm.
+    status: 'DA_BAN_GIAO',
+    // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
+    location: 'Tân Bình, TP.HCM',
     category: 'Chung cư',
     image: '/images/projects/bay-hien/bay-hien-tower-exterior-01.jpg',
     highlights: [
       'Cách Ngã tư Bảy Hiền khoảng 300m, sát chợ sỉ Tân Bình.',
       '5 tầng khối đế thương mại (~500 sạp chợ sỉ phụ liệu dệt may).',
-      'Chưa được cấp sổ hồng — dự án đang trong danh sách được TP.HCM xử lý gỡ vướng.',
+      'Đối diện Bệnh viện Thống Nhất, gần THPT Nguyễn Thượng Hiền và Công viên Lê Thị Riêng.',
     ],
     quickFacts: [
+      {
+        label: 'Địa chỉ',
+        value: 'Số 9 Phạm Phú Thứ, Phường 11, Quận Tân Bình, TP.HCM',
+      },
       { label: 'Diện tích khu đất', value: '2.712 m²' },
       { label: 'Quy mô', value: '23 tầng nổi, 2 tầng hầm (hầm ~5.500 m²)' },
       { label: 'Số căn hộ', value: '168 - 196 căn (70 - 101 m² và Duplex)' },
@@ -303,6 +362,7 @@ async function main() {
              summary = EXCLUDED.summary,
              description = EXCLUDED.description,
              status = EXCLUDED.status,
+             content_status = EXCLUDED.content_status,
              location = EXCLUDED.location,
              image = EXCLUDED.image,
              gallery = EXCLUDED.gallery,
@@ -326,7 +386,9 @@ async function main() {
         project.category ?? null,
         localizedList(project.highlights),
         JSON.stringify(project.quickFacts ?? []),
-        project.gallerySections ? JSON.stringify(project.gallerySections) : null,
+        project.gallerySections
+          ? JSON.stringify(project.gallerySections)
+          : null,
         project.mapLocation ? JSON.stringify(project.mapLocation) : null,
         order,
       ],
@@ -371,7 +433,12 @@ async function main() {
           itemOrder,
         ],
       );
-      await seedGallery(client, projectId, itemRes.rows[0].id, item.gallery ?? []);
+      await seedGallery(
+        client,
+        projectId,
+        itemRes.rows[0].id,
+        item.gallery ?? [],
+      );
     }
 
     const itemCount = (project.items ?? []).length;
@@ -385,6 +452,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('❌ Seed dự án thất bại:', error instanceof Error ? error.message : error);
+  console.error(
+    '❌ Seed dự án thất bại:',
+    error instanceof Error ? error.message : error,
+  );
   process.exit(1);
 });

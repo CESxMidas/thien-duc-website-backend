@@ -37,22 +37,60 @@ enum SubmissionStatus {
   DONE
 }
 
+/** Trạng thái yêu cầu cập nhật hồ sơ cá nhân do nhân viên gửi lên. */
+enum ProfileChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                  String    @id @default(uuid())
   email               String    @unique
   passwordHash        String    @map("password_hash")
   name                String
   role                Role      @default(EDITOR)
+  // Thông tin hồ sơ nhân viên (chuẩn doanh nghiệp) — đều tùy chọn.
+  phone               String?
+  avatarUrl           String?   @map("avatar_url")
+  position            String? // Chức vụ, vd "Biên tập viên nội dung"
+  department          String? // Phòng ban, vd "Marketing"
+  bio                 String? // Giới thiệu ngắn
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
   isActive            Boolean   @default(true) @map("is_active")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  refreshTokens RefreshToken[]
-  mediaAssets   MediaAsset[]
+  refreshTokens         RefreshToken[]
+  mediaAssets           MediaAsset[]
+  profileChangeRequests ProfileChangeRequest[] @relation("ProfileChangeRequester")
+  reviewedProfileChanges ProfileChangeRequest[] @relation("ProfileChangeReviewer")
 
   @@map("users")
+}
+
+/**
+ * Yêu cầu cập nhật hồ sơ do nhân viên (EDITOR) gửi lên, chờ ADMIN/SUPER_ADMIN
+ * duyệt. `payload` giữ nguyên các field đề xuất; khi duyệt mới áp vào User. Mỗi
+ * người chỉ giữ một yêu cầu PENDING tại một thời điểm (xem service).
+ */
+model ProfileChangeRequest {
+  id         String              @id @default(uuid())
+  userId     String              @map("user_id")
+  user       User                @relation("ProfileChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
+  payload    Json // { name?, phone?, avatarUrl?, position?, department?, bio? }
+  status     ProfileChangeStatus @default(PENDING)
+  reviewNote String?             @map("review_note")
+  reviewedById String?           @map("reviewed_by_id")
+  reviewedBy User?               @relation("ProfileChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt DateTime?           @map("reviewed_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@map("profile_change_requests")
 }
 
 model RefreshToken {
@@ -190,6 +228,25 @@ model Banner {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("banners")
+}
+
+// Dự án hợp tác — các dự án Thiên Đức đồng phát triển cùng đối tác (vd. CapitaLand).
+// Khác `Project`: không có trang chi tiết, không ảnh, không dùng enum `ProjectStatus`.
+// Hiển thị ở section "Dự án hợp tác" trang chủ. Mọi field chữ đều song ngữ {vi, en?}.
+model CooperationProject {
+  id            String        @id @default(uuid())
+  name          Json
+  location      Json
+  role          Json
+  partner       Json
+  scale         Json
+  status        Json
+  contentStatus ContentStatus @default(DRAFT) @map("content_status")
+  order         Int           @default(0)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@map("cooperation_projects")
 }
 
 model ContactSubmission {

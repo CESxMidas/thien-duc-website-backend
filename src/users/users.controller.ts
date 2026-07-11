@@ -6,17 +6,22 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Role } from '../../generated/prisma/client';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ProfileChangeStatus, Role } from '../../generated/prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
+
+type Actor = { id: string; role: Role };
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -29,6 +34,43 @@ export class UsersController {
   @Get()
   findAll() {
     return this.usersService.findAll();
+  }
+
+  // --- Hồ sơ cá nhân + luồng duyệt ---
+  // Khai báo TRƯỚC route ':id' để '/users/me' không bị coi là id = "me".
+
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Hồ sơ của người đang đăng nhập (kèm yêu cầu chờ duyệt)',
+  })
+  @Get('me')
+  getMyProfile(@CurrentUser() actor: Actor) {
+    return this.usersService.getMyProfile(actor.id);
+  }
+
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Gửi cập nhật hồ sơ (EDITOR chờ duyệt, admin áp thẳng)',
+  })
+  @Patch('me')
+  updateMyProfile(@Body() dto: UpdateProfileDto, @CurrentUser() actor: Actor) {
+    return this.usersService.submitProfileChange(actor.id, dto, actor.role);
+  }
+
+  @ApiOperation({ summary: 'Danh sách yêu cầu cập nhật hồ sơ chờ duyệt' })
+  @Get('profile-requests')
+  listProfileRequests(@Query('status') status?: ProfileChangeStatus) {
+    return this.usersService.listProfileRequests(status);
+  }
+
+  @ApiOperation({ summary: 'Duyệt / từ chối một yêu cầu cập nhật hồ sơ' })
+  @Patch('profile-requests/:id')
+  reviewProfileRequest(
+    @Param('id') id: string,
+    @Body() dto: ReviewProfileRequestDto,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.usersService.reviewProfileRequest(id, dto, actor.id);
   }
 
   @Get(':id')
@@ -47,14 +89,14 @@ export class UsersController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
-    @CurrentUser() actor: { id: string },
+    @CurrentUser() actor: Actor,
   ) {
     return this.usersService.update(id, dto, actor.id);
   }
 
   @Roles(Role.SUPER_ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() actor: { id: string }) {
+  remove(@Param('id') id: string, @CurrentUser() actor: Actor) {
     return this.usersService.remove(id, actor.id);
   }
 }

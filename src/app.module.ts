@@ -12,6 +12,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { NewsModule } from './news/news.module';
 import { PagesModule } from './pages/pages.module';
 import { BannersModule } from './banners/banners.module';
+import { CooperationModule } from './cooperation/cooperation.module';
 import { ContactModule } from './contact/contact.module';
 import { MediaModule } from './media/media.module';
 import { SearchModule } from './search/search.module';
@@ -28,6 +29,7 @@ import { SearchModule } from './search/search.module';
     NewsModule,
     PagesModule,
     BannersModule,
+    CooperationModule,
     ContactModule,
     MediaModule,
     SearchModule,

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsObject,
   IsOptional,
@@ -41,18 +42,19 @@ export class CreateProjectItemDto {
   @IsObject()
   description?: Record<string, unknown>;
 
-  @ApiProperty({ required: false })
+  // Mảng JSON (xem ghi chú ở create-project.dto.ts) — dùng `@IsArray()`.
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  highlights?: Record<string, unknown>;
+  @IsArray()
+  highlights?: unknown[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  quickFacts?: Record<string, unknown>;
+  @IsArray()
+  quickFacts?: unknown[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  gallerySections?: Record<string, unknown>;
+  @IsArray()
+  gallerySections?: unknown[];
 }

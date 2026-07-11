@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { ContentStatus } from '../../../generated/prisma/client';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
@@ -34,6 +40,11 @@ export class CreateCooperationProjectDto {
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   status!: TranslatedTextDto;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  image?: string;
 
   @ApiProperty({ required: false, enum: ContentStatus })
   @IsOptional()

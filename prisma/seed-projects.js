@@ -203,8 +203,15 @@ const projects = [
         summary:
           'Trung tâm thương mại 5 tầng trong nội khu, đang hoàn thiện giai đoạn cuối để đưa vào khai thác.',
         status: 'DANG_THI_CONG',
+        // Chưa có ảnh chụp riêng của TTTM (đang hoàn thiện) — tạm dùng ảnh phối
+        // cảnh tổng thể khu đô thị để thẻ hạng mục không bị trống ảnh.
+        // TODO: thay bằng ảnh thật của Hưng Phú Mall khi có.
+        image:
+          '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-03.jpg',
         quickFacts: [{ label: 'Quy mô', value: '5 tầng' }],
-        gallery: [],
+        gallery: [
+          '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-03.jpg',
+        ],
       },
       {
         slug: 'khu-nha-o-thap-tang',
@@ -212,8 +219,15 @@ const projects = [
         summary:
           '330 căn nhà phố liền kề, shophouse đi bộ và biệt thự — đã hoàn thiện, cư dân đã dọn vào sinh sống ổn định.',
         status: 'DA_BAN_GIAO',
+        // Ảnh phối cảnh tổng thể (aerial) đã thể hiện rõ khu nhà phố thấp tầng.
+        // TODO: bổ sung ảnh chụp thực tế khu nhà ở khi có.
+        image:
+          '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-02.jpg',
         quickFacts: [{ label: 'Số căn', value: '330 căn' }],
-        gallery: [],
+        gallery: [
+          '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-02.jpg',
+          '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
+        ],
       },
     ],
   },

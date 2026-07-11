@@ -11,6 +11,8 @@ const { Client } = require('pg');
 /** Field song ngữ: hiện chỉ có tiếng Việt, bản tiếng Anh bổ sung sau. */
 const vi = (text) => ({ vi: text });
 
+// Ảnh phối cảnh dùng ảnh placeholder thương hiệu (SVG trong frontend public) —
+// TODO: thay bằng ảnh thật của từng dự án qua Admin khi có.
 const cooperationProjects = [
   {
     name: 'Vista Verde',
@@ -19,6 +21,7 @@ const cooperationProjects = [
     partner: 'CapitaLand (Singapore)',
     scale: '25.295 m² · 4 tòa tháp · 1.152 căn hộ',
     status: 'Đã bàn giao',
+    image: '/images/cooperation/vista-verde-placeholder.svg',
   },
   {
     name: 'Feliz en Vista',
@@ -27,6 +30,7 @@ const cooperationProjects = [
     partner: 'CapitaLand (Singapore)',
     scale: '4 tòa tháp căn hộ cao cấp',
     status: 'Đã bàn giao',
+    image: '/images/cooperation/feliz-en-vista-placeholder.svg',
   },
 ];
 
@@ -53,8 +57,8 @@ async function main() {
   for (const [order, project] of cooperationProjects.entries()) {
     await client.query(
       `INSERT INTO cooperation_projects
-         (id, name, location, role, partner, scale, status, content_status, "order", created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'PUBLISHED', $7, now(), now())`,
+         (id, name, location, role, partner, scale, status, image, content_status, "order", created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'PUBLISHED', $8, now(), now())`,
       [
         vi(project.name),
         vi(project.location),
@@ -62,6 +66,7 @@ async function main() {
         vi(project.partner),
         vi(project.scale),
         vi(project.status),
+        project.image ?? null,
         order,
       ],
     );

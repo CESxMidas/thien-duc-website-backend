@@ -22,6 +22,27 @@ function isUniqueViolation(error: unknown): boolean {
 /** Ảnh và hạng mục luôn trả theo `order` tăng dần — thứ tự do biên tập viên đặt. */
 const BY_ORDER = { order: 'asc' } as const;
 
+/**
+ * Các cột JSON tùy chọn: khi Admin muốn **xóa** nội dung (vd. bỏ bản đồ), payload
+ * gửi `null`. Prisma không nhận `null` trực tiếp cho cột Json? — phải quy đổi sang
+ * `Prisma.DbNull`. Bỏ qua `undefined` (không đụng tới field đó).
+ */
+const NULLABLE_JSON_FIELDS = [
+  'description',
+  'highlights',
+  'quickFacts',
+  'gallerySections',
+  'mapLocation',
+] as const;
+
+function normalizeJsonNulls<T extends object>(dto: T): T {
+  const out = { ...dto } as Record<string, unknown>;
+  for (const field of NULLABLE_JSON_FIELDS) {
+    if (out[field] === null) out[field] = Prisma.DbNull;
+  }
+  return out as T;
+}
+
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -97,7 +118,7 @@ export class ProjectsService {
     try {
       return await this.prisma.project.update({
         where: { id: project.id },
-        data: dto as unknown as Prisma.ProjectUpdateInput,
+        data: normalizeJsonNulls(dto) as unknown as Prisma.ProjectUpdateInput,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {

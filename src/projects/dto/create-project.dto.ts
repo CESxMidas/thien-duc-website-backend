@@ -55,20 +55,23 @@ export class CreateProjectDto {
   @IsString()
   category?: string;
 
-  @ApiProperty({ required: false })
+  // `highlights`, `quickFacts`, `gallerySections` lưu dạng **mảng** JSON (mảng
+  // field song ngữ / mảng {label,value} / mảng section) — dùng `@IsArray()`,
+  // không phải `@IsObject()` (class-validator loại mảng khỏi `isObject`).
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  highlights?: Record<string, unknown>;
+  @IsArray()
+  highlights?: unknown[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  quickFacts?: Record<string, unknown>;
+  @IsArray()
+  quickFacts?: unknown[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, type: [Object] })
   @IsOptional()
-  @IsObject()
-  gallerySections?: Record<string, unknown>;
+  @IsArray()
+  gallerySections?: unknown[];
 
   @ApiProperty({ required: false })
   @IsOptional()

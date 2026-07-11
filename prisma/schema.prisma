@@ -241,6 +241,9 @@ model CooperationProject {
   partner       Json
   scale         Json
   status        Json
+  // Ảnh phối cảnh dự án hợp tác (tùy chọn). Bổ sung sau thiết kế ban đầu — thẻ
+  // trang chủ hiện ảnh khi có, không có thì lùi về nền thương hiệu như cũ.
+  image         String?
   contentStatus ContentStatus @default(DRAFT) @map("content_status")
   order         Int           @default(0)
   createdAt     DateTime      @default(now()) @map("created_at")

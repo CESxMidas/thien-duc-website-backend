@@ -22,9 +22,11 @@ export class SearchService {
    * ghi với cùng `include` như `GET /projects` để frontend tái dùng mapper sẵn có.
    */
   private async searchProjects(q: string, limit: number) {
+    // SEC-INJ-001: Use plainto_tsquery instead of websearch_to_tsquery to prevent FTS operator injection
+    // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT p."id"
-      FROM "projects" p, websearch_to_tsquery('simple', ${q}) AS query
+      FROM "projects" p, plainto_tsquery('simple', ${q}) AS query
       WHERE p."content_status" = 'PUBLISHED'::"ContentStatus"
         AND project_search_document(
               p."title", p."summary", p."description", p."category", p."location"
@@ -51,9 +53,11 @@ export class SearchService {
   }
 
   private async searchNews(q: string, limit: number) {
+    // SEC-INJ-001: Use plainto_tsquery instead of websearch_to_tsquery to prevent FTS operator injection
+    // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT n."id"
-      FROM "news_posts" n, websearch_to_tsquery('simple', ${q}) AS query
+      FROM "news_posts" n, plainto_tsquery('simple', ${q}) AS query
       WHERE n."status" = 'PUBLISHED'::"ContentStatus"
         AND news_search_document(n."title", n."summary", n."content", n."author") @@ query
       ORDER BY ts_rank(

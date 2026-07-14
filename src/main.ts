@@ -12,8 +12,18 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   app.use(helmet());
+
+  // CORS_ORIGIN bắt buộc — không fallback thành wildcard để tránh vô tình mở công khai
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  if (!corsOrigin) {
+    throw new Error(
+      'CORS_ORIGIN environment variable is required. Provide comma-separated allowed origins (no spaces).',
+    );
+  }
+
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGIN')?.split(',') ?? '*',
+    origin: corsOrigin.split(',').map((o) => o.trim()),
+    credentials: true,
   });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import type { MulterFile } from './types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMediaAssetDto } from './dto/create-media-asset.dto';
@@ -37,7 +38,7 @@ export class MediaService {
   }
 
   async upload(
-    file: Express.Multer.File,
+    file: MulterFile,
     subFolder: string | undefined,
     uploadedById?: string,
   ) {

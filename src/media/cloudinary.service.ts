@@ -6,6 +6,7 @@ import {
   type UploadApiResponse,
 } from 'cloudinary';
 import { Readable } from 'node:stream';
+import type { MulterFile } from './types';
 
 /** Thư mục mặc định khi client không chỉ định. Cloud `thienduc` chỉ phục vụ
  * website này nên không cần thêm một cấp thư mục gốc mang tên công ty. */
@@ -63,7 +64,7 @@ export class CloudinaryService implements OnModuleInit {
     return safe || DEFAULT_FOLDER;
   }
 
-  uploadImage(file: Express.Multer.File, folder: string) {
+  uploadImage(file: MulterFile, folder: string) {
     return new Promise<UploadApiResponse>((resolve, reject) => {
       const upload = cloudinary.uploader.upload_stream(
         {

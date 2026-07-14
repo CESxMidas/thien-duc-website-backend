@@ -20,6 +20,7 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import type { MulterFile } from './types';
 import { Role } from '../../generated/prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -77,7 +78,7 @@ export class MediaController {
         .addMaxSizeValidator({ maxSize: MAX_UPLOAD_BYTES })
         .build({ fileIsRequired: true }),
     )
-    file: Express.Multer.File,
+    file: MulterFile,
     @CurrentUser() user: { id: string },
     @Query('folder') folder?: string,
   ) {

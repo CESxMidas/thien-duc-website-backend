@@ -4,13 +4,15 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreatePageDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 160 })
   @IsString()
+  @MaxLength(160)
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })

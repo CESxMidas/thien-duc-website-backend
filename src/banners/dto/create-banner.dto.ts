@@ -5,13 +5,15 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreateBannerDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 500 })
   @IsString()
+  @MaxLength(500)
   image!: string;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
@@ -31,8 +33,9 @@ export class CreateBannerDto {
   @Type(() => TranslatedTextDto)
   subtitle?: TranslatedTextDto;
 
-  @ApiProperty()
+  @ApiProperty({ maxLength: 500 })
   @IsString()
+  @MaxLength(500)
   href!: string;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
@@ -41,9 +44,11 @@ export class CreateBannerDto {
   @Type(() => TranslatedTextDto)
   ctaLabel?: TranslatedTextDto;
 
-  @ApiProperty({ required: false })
+  // Giá trị CSS object-position, vd "center 30%" — rất ngắn.
+  @ApiProperty({ required: false, maxLength: 60 })
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   objectPosition?: string;
 
   @ApiProperty({ required: false })

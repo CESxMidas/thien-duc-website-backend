@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { ContentStatus } from '../../../generated/prisma/client';
@@ -41,9 +42,10 @@ export class CreateCooperationProjectDto {
   @Type(() => TranslatedTextDto)
   status!: TranslatedTextDto;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 500 })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   image?: string;
 
   @ApiProperty({ required: false, enum: ContentStatus })

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SubmissionStatus } from '../../../generated/prisma/client';
 
 export class UpdateContactSubmissionDto {
@@ -9,8 +9,11 @@ export class UpdateContactSubmissionDto {
   @IsEnum(SubmissionStatus)
   status?: SubmissionStatus;
 
-  @ApiProperty({ required: false })
+  // 1000 (gấp đôi mức note 500 của review-profile-request): ghi chú nội bộ có
+  // thể cộng dồn qua nhiều lần chăm sóc một lead.
+  @ApiProperty({ required: false, maxLength: 1000 })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   internalNote?: string;
 }

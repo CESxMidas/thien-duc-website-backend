@@ -6,14 +6,16 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { ProjectStatus } from '../../../generated/prisma/client';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreateProjectDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 160 })
   @IsString()
+  @MaxLength(160)
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })
@@ -35,24 +37,30 @@ export class CreateProjectDto {
   @IsObject()
   description?: Record<string, unknown>;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 300 })
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   location?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 500 })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   image?: string;
 
+  // Mảng URL ảnh — trần theo từng phần tử, cùng mức 500 với các field URL khác.
   @ApiProperty({ required: false, type: [String] })
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
   gallery?: string[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 120 })
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   category?: string;
 
   // `highlights`, `quickFacts`, `gallerySections` lưu dạng **mảng** JSON (mảng

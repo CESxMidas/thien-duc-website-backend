@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
@@ -18,11 +19,14 @@ export const SEARCH_MAX_LIMIT = 50;
 
 export class SearchQueryDto {
   @ApiProperty({
-    description: 'Từ khóa tìm kiếm, tối thiểu 2 ký tự.',
+    description: 'Từ khóa tìm kiếm, 2–200 ký tự.',
     example: 'Hưng Phú',
+    maxLength: 200,
   })
   @IsString()
   @MinLength(2, { message: 'Từ khóa phải có ít nhất 2 ký tự' })
+  // Route công khai; chuỗi q đổ vào raw SQL FTS — chặn từ khóa dài bất thường.
+  @MaxLength(200, { message: 'Từ khóa tối đa 200 ký tự' })
   q!: string;
 
   @ApiPropertyOptional({

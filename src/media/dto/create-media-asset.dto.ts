@@ -1,14 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateMediaAssetDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 500 })
   @IsString()
+  @MaxLength(500)
   url!: string;
 
-  @ApiProperty({ required: false })
+  // public_id Cloudinary gồm thư mục + tên file — 300 là dư dả.
+  @ApiProperty({ required: false, maxLength: 300 })
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   publicId?: string;
 
   @ApiProperty({ required: false })
@@ -21,9 +24,11 @@ export class CreateMediaAssetDto {
   @IsInt()
   height?: number;
 
-  @ApiProperty({ required: false })
+  // Đuôi định dạng ảnh ("webp", "jpg"…) — 60 đã quá rộng.
+  @ApiProperty({ required: false, maxLength: 60 })
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   format?: string;
 
   @ApiProperty({ required: false })
@@ -31,8 +36,9 @@ export class CreateMediaAssetDto {
   @IsInt()
   bytes?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 200 })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   folder?: string;
 }

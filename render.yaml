@@ -6,14 +6,25 @@ databases:
   - name: thien-duc-db
     databaseName: thien_duc
     user: thienduc
-    plan: free # Postgres free của Render hết hạn sau 90 ngày — nâng plan khi lên thật.
+    # Plan Postgres trả phí rẻ nhất có lưu trữ bền + backup được quản lý. Free tier
+    # hết hạn 90 ngày và KHÔNG có backup (task →2). `basic-256mb` là tên plan tại
+    # thời điểm viết — PHẢI kiểm tra lại tên/giá/retention/PITR ở Render Dashboard
+    # khi nâng (Render đổi tên plan theo thời gian). Xem docs/07-deployment/backup-and-restore.md.
+    # LƯU Ý: đổi dòng này KHÔNG tự thanh toán; free→paid có thể phải tạo instance
+    # Postgres mới + migrate dữ liệu (pg_dump/pg_restore) nếu Render không cho nâng
+    # tại chỗ — xem "Đường di trú" trong backup-and-restore.md.
+    plan: basic-256mb
     region: singapore # PHẢI cùng region với web service, nếu không hostname nội bộ không kết nối được (P1001).
 
 services:
   - type: web
     name: thien-duc-website-backend
     runtime: node
-    plan: free # Free instance ngủ sau 15 phút không request; nâng plan để chạy liên tục.
+    # Web service trả phí always-on (không ngủ) — bỏ cold start ~30–50s làm timeout
+    # form liên hệ và làm cron đăng bài chạy đáng tin (task →2). `starter` là tên
+    # plan tại thời điểm viết — kiểm tra lại tên/giá ở Render Dashboard khi nâng.
+    # Đổi dòng này KHÔNG tự thanh toán; cần xác nhận + gắn thẻ ở Dashboard.
+    plan: starter
     region: singapore # gần Việt Nam nhất.
     branch: main
     buildCommand: npm ci && npm run build
@@ -52,3 +63,10 @@ services:
         sync: false
       - key: SMTP_FROM
         value: dautuxaydungthienduc@yahoo.com
+      # Nơi nhận email báo lead mới. Bỏ trống → gửi về chính SMTP_FROM.
+      - key: CONTACT_NOTIFY_TO
+        sync: false
+      # Sentry DSN (project backend riêng) — nhập tay ở Dashboard. Thiếu = tắt
+      # error tracking, app vẫn chạy. Xem docs/07-deployment/monitoring-and-alerting.md.
+      - key: SENTRY_DSN
+        sync: false

@@ -5,13 +5,15 @@ import {
   IsDateString,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreateNewsPostDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 160 })
   @IsString()
+  @MaxLength(160)
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })
@@ -35,19 +37,23 @@ export class CreateNewsPostDto {
   @Type(() => TranslatedTextDto)
   content?: TranslatedTextDto[];
 
-  @ApiProperty({ required: false })
+  // UUID (36 ký tự) — 60 cho dư địa nếu đổi định dạng id.
+  @ApiProperty({ required: false, maxLength: 60 })
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   categoryId?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 120 })
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   author?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 500 })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   image?: string;
 
   @ApiProperty({ required: false })

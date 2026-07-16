@@ -6,14 +6,16 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { ProjectStatus } from '../../../generated/prisma/client';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreateProjectItemDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 160 })
   @IsString()
+  @MaxLength(160)
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })
@@ -32,9 +34,10 @@ export class CreateProjectItemDto {
   @IsEnum(ProjectStatus)
   status?: ProjectStatus;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 500 })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   image?: string;
 
   @ApiProperty({ required: false })

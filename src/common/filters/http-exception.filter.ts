@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Response } from 'express';
 
 @Catch()
@@ -34,6 +35,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error(
         exception instanceof Error ? exception.stack : exception,
       );
+      // Task →5: chỉ lỗi 500 bất ngờ mới lên Sentry — HttpException (400/404/
+      // 409/423/429…) là hành vi chủ đích, capture sẽ ngập noise. Chưa init
+      // (thiếu DSN) thì lời gọi này là no-op an toàn.
+      Sentry.captureException(exception);
     }
 
     response.status(status).json({

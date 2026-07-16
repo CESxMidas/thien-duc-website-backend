@@ -1,8 +1,8 @@
 # thien-duc-website-backend
 
 Backend NestJS + Prisma + PostgreSQL cho website Thiên Đức (PA2). Xem kế hoạch tổng ở
-`../thien-duc-website-docs/KE-HOACH-CODING.md` và các câu hỏi chờ công ty xác nhận ở
-`../thien-duc-website-docs/CAU-HOI-CAN-XAC-NHAN.md`. Quy ước code dùng chung cho
+`../thien-duc-website-docs/docs/04-implementation/implementation-plan.md` và các câu hỏi chờ công ty xác nhận ở
+`../thien-duc-website-docs/docs/01-requirements/open-questions.md`. Quy ước code dùng chung cho
 frontend / admin / backend: `../AGENTS.md`.
 
 ## Modules
@@ -31,7 +31,7 @@ Postgres local chạy bằng Docker ở **port 5433** (`docker compose up -d`) v
 > ⚠️ Nối DB từ ngoài Render **bắt buộc** có `?sslmode=require` trong `DATABASE_URL`
 > (adapter `@prisma/adapter-pg` không tự bật SSL) — thiếu là mọi route chạm DB trả
 > `500` với thông báo đánh lạc hướng. Prisma CLI vẫn chạy được nên đừng lấy nó làm
-> bằng chứng DB ổn. Chi tiết: `../thien-duc-website-docs/DEPLOY.md`.
+> bằng chứng DB ổn. Chi tiết: `../thien-duc-website-docs/docs/07-deployment/deployment-guide.md`.
 
 ## Quy ước
 

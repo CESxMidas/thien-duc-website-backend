@@ -29,6 +29,8 @@ const BY_ORDER = { order: 'asc' } as const;
  */
 const NULLABLE_JSON_FIELDS = [
   'description',
+  'location',
+  'category',
   'highlights',
   'quickFacts',
   'gallerySections',

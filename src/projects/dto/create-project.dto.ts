@@ -37,11 +37,11 @@ export class CreateProjectDto {
   @IsObject()
   description?: Record<string, unknown>;
 
-  @ApiProperty({ required: false, maxLength: 300 })
+  @ApiProperty({ required: false, type: TranslatedTextDto })
   @IsOptional()
-  @IsString()
-  @MaxLength(300)
-  location?: string;
+  @ValidateNested()
+  @Type(() => TranslatedTextDto)
+  location?: TranslatedTextDto;
 
   @ApiProperty({ required: false, maxLength: 500 })
   @IsOptional()
@@ -57,11 +57,11 @@ export class CreateProjectDto {
   @MaxLength(500, { each: true })
   gallery?: string[];
 
-  @ApiProperty({ required: false, maxLength: 120 })
+  @ApiProperty({ required: false, type: TranslatedTextDto })
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  category?: string;
+  @ValidateNested()
+  @Type(() => TranslatedTextDto)
+  category?: TranslatedTextDto;
 
   // `highlights`, `quickFacts`, `gallerySections` lưu dạng **mảng** JSON (mảng
   // field song ngữ / mảng {label,value} / mảng section) — dùng `@IsArray()`,

@@ -114,10 +114,10 @@ model Project {
   description     Json?
   status          ProjectStatus
   contentStatus   ContentStatus @default(DRAFT) @map("content_status")
-  location        String?
+  location        Json?
   image           String?
   gallery         String[]
-  category        String?
+  category        Json?
   highlights      Json?
   quickFacts      Json?         @map("quick_facts")
   gallerySections Json?         @map("gallery_sections")

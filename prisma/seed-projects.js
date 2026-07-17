@@ -16,6 +16,13 @@ const { Client } = require('pg');
 const vi = (text) => ({ vi: text });
 
 /**
+ * location/category giờ là JSONB song ngữ (EN-FULL-C2). Chấp nhận cả chuỗi cũ
+ * (gói vào `{ vi }`) lẫn object `{ vi, en }` đã điền sẵn — trả null nếu trống.
+ */
+const bilingual = (value) =>
+  value == null ? null : typeof value === 'string' ? { vi: value } : value;
+
+/**
  * `highlights` là **mảng field song ngữ**, không phải mảng chuỗi — mapper của
  * frontend (`src/lib/api/mappers.ts`) đọc `.vi` của từng phần tử.
  */
@@ -34,8 +41,8 @@ const projects = [
     // là sai sự thật. Dự án bàn giao mà một tiện ích còn hoàn thiện là bình thường.
     status: 'DA_BAN_GIAO',
     // Địa danh ngắn cho thẻ dự án — địa chỉ đầy đủ nằm ở `quickFacts`.
-    location: 'Bến Tre',
-    category: 'Khu đô thị',
+    location: { vi: 'Bến Tre', en: 'Ben Tre' },
+    category: { vi: 'Khu đô thị', en: 'Urban Area' },
     image:
       '/images/projects/hung-phu/master-plan/hung-phu-master-plan-aerial-01.jpg',
     highlights: [
@@ -397,10 +404,10 @@ async function main() {
         vi(project.summary),
         project.description ? vi(project.description) : null,
         project.status,
-        project.location ?? null,
+        bilingual(project.location),
         project.image ?? null,
         project.gallery ?? [],
-        project.category ?? null,
+        bilingual(project.category),
         localizedList(project.highlights),
         JSON.stringify(project.quickFacts ?? []),
         project.gallerySections

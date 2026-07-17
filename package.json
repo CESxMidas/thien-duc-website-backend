@@ -26,7 +26,8 @@
     "prisma:seed:projects": "node prisma/seed-projects.js",
     "prisma:seed:news": "node prisma/seed-news.js",
     "prisma:seed:pages": "node prisma/seed-pages.js",
-    "prisma:seed:cooperation": "node prisma/seed-cooperation.js"
+    "prisma:seed:cooperation": "node prisma/seed-cooperation.js",
+    "prisma:backfill:map-labels": "node prisma/backfill-map-labels.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

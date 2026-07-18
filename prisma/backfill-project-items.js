@@ -273,9 +273,14 @@ async function main() {
     for (const w of writes) {
       await client.query(
         `UPDATE project_items
-            SET description = $1, highlights = $2, quick_facts = $3, updated_at = now()
+            SET description = $1::jsonb, highlights = $2::jsonb, quick_facts = $3::jsonb, updated_at = now()
           WHERE id = $4`,
-        [w.description, w.highlights, w.quick_facts, w.id],
+        [
+          JSON.stringify(w.description),
+          JSON.stringify(w.highlights),
+          JSON.stringify(w.quick_facts),
+          w.id,
+        ],
       );
     }
     console.log(

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { lookup } from 'node:dns/promises';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
@@ -48,7 +49,7 @@ export class MailService implements OnModuleInit {
 
   constructor(private readonly config: ConfigService) {}
 
-  onModuleInit() {
+  async onModuleInit(): Promise<void> {
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     const password = this.config.get<string>('SMTP_PASSWORD');
@@ -64,18 +65,36 @@ export class MailService implements OnModuleInit {
       return;
     }
 
-    // `@types/nodemailer` chưa khai `family`, nhưng nodemailer chuyển thẳng
-    // xuống socket connect lúc chạy. Khai bằng intersection `& { family?: number }`
-    // để vẫn type-safe (phần còn lại của options vẫn được kiểm tra đầy đủ), không
-    // dùng `as any` làm mất kiểu.
+    // Runtime này (Render) KHÔNG tới được IPv6 → smtp.gmail.com phân giải ra bản
+    // ghi AAAA gây `connect ENETUNREACH …:587`. Chỉ đặt `family: 4` chưa đủ, nên
+    // phân giải hostname sang IPv4 TRƯỚC rồi nối bằng chính IP đó; hostname gốc
+    // vẫn được giữ cho SNI/xác thực chứng chỉ TLS.
+    let ipv4Host: string;
+    try {
+      const resolved = await lookup(host, { family: 4 });
+      ipv4Host = resolved.address;
+    } catch (error) {
+      // Không phân giải được IPv4 → TẮT gửi email (giữ transporter = null) thay vì
+      // để app sập; lead vẫn được lưu. KHÔNG log secret/PII.
+      this.logger.error(
+        `Không phân giải được IPv4 cho SMTP host — tắt gửi email thông báo liên hệ (lead vẫn được lưu): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return;
+    }
+
+    // `@types/nodemailer` chưa khai `family`, nên khai bằng intersection
+    // `& { family?: number }` để vẫn type-safe (không dùng `as any`).
     const transportOptions: SMTPTransport.Options & { family?: number } = {
-      host,
+      host: ipv4Host, // nối bằng IPv4 đã phân giải, tránh AAAA/IPv6.
       port,
       secure: port === 465, // 465 = TLS ngầm; 587 = STARTTLS.
       auth: { user, pass: password },
-      // Render không tiếp cận được IPv6 → smtp.gmail.com phân giải ra AAAA gây
-      // `connect ENETUNREACH …:587`. Ép IPv4 để nối qua địa chỉ IPv4.
       family: 4,
+      // Giữ hostname gốc cho SNI + xác thực chứng chỉ: cert cấp cho smtp.gmail.com
+      // chứ không phải cho địa chỉ IP.
+      tls: { servername: host },
       // Chặn treo lâu khi mạng SMTP không tới được (mặc định nodemailer rất dài:
       // connection 2 phút, socket 10 phút) — lỗi sớm và được log lại.
       connectionTimeout: 10000,
@@ -84,10 +103,10 @@ export class MailService implements OnModuleInit {
     };
     this.transporter = nodemailer.createTransport(transportOptions);
 
-    // Log quan sát (KHÔNG chứa secret/PII): chỉ host/port/secure + có notifyTo hay
-    // không. Không log user/from/password/địa chỉ email.
+    // Log quan sát (KHÔNG chứa secret/PII): host GỐC/port/secure/family/ipv4Resolved
+    // + có notifyTo hay không. KHÔNG log user/from/password/địa chỉ email/IP đã phân giải.
     this.logger.log(
-      `SMTP đã cấu hình: host=${host} port=${port} secure=${port === 465} notifyTo=${
+      `SMTP đã cấu hình: host=${host} port=${port} secure=${port === 465} family=4 ipv4Resolved=true notifyTo=${
         this.notifyTo ? 'set' : 'unset'
       }`,
     );

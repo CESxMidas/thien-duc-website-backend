@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { json } from '../common/prisma-json';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 
@@ -36,7 +37,11 @@ export class PagesService {
   async create(dto: CreatePageDto) {
     try {
       return await this.prisma.page.create({
-        data: dto as unknown as Prisma.PageCreateInput,
+        data: {
+          ...dto,
+          title: json(dto.title),
+          content: json(dto.content),
+        } satisfies Prisma.PageCreateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error);
@@ -48,7 +53,11 @@ export class PagesService {
     try {
       return await this.prisma.page.update({
         where: { id: page.id },
-        data: dto as unknown as Prisma.PageUpdateInput,
+        data: {
+          ...dto,
+          title: json(dto.title),
+          content: json(dto.content),
+        } satisfies Prisma.PageUpdateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error);

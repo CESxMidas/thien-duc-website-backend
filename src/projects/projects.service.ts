@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { json } from '../common/prisma-json';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -105,7 +106,18 @@ export class ProjectsService {
   async create(dto: CreateProjectDto) {
     try {
       return await this.prisma.project.create({
-        data: dto as unknown as Prisma.ProjectCreateInput,
+        data: {
+          ...dto,
+          title: json(dto.title),
+          summary: json(dto.summary),
+          description: json(dto.description),
+          location: json(dto.location),
+          category: json(dto.category),
+          highlights: json(dto.highlights),
+          quickFacts: json(dto.quickFacts),
+          gallerySections: json(dto.gallerySections),
+          mapLocation: json(dto.mapLocation),
+        } satisfies Prisma.ProjectCreateInput,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -117,10 +129,24 @@ export class ProjectsService {
 
   async update(slug: string, dto: UpdateProjectDto) {
     const project = await this.findBySlug(slug);
+    // Chuẩn hóa null → Prisma.DbNull TRƯỚC, rồi bọc chính giá trị đã chuẩn hóa
+    // để giữ nguyên hành vi xóa field JSON (json() là identity lúc chạy).
+    const data = normalizeJsonNulls(dto);
     try {
       return await this.prisma.project.update({
         where: { id: project.id },
-        data: normalizeJsonNulls(dto) as unknown as Prisma.ProjectUpdateInput,
+        data: {
+          ...data,
+          title: json(data.title),
+          summary: json(data.summary),
+          description: json(data.description),
+          location: json(data.location),
+          category: json(data.category),
+          highlights: json(data.highlights),
+          quickFacts: json(data.quickFacts),
+          gallerySections: json(data.gallerySections),
+          mapLocation: json(data.mapLocation),
+        } satisfies Prisma.ProjectUpdateInput,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -154,7 +180,13 @@ export class ProjectsService {
         data: {
           ...dto,
           projectId: project.id,
-        } as unknown as Prisma.ProjectItemUncheckedCreateInput,
+          title: json(dto.title),
+          summary: json(dto.summary),
+          description: json(dto.description),
+          highlights: json(dto.highlights),
+          quickFacts: json(dto.quickFacts),
+          gallerySections: json(dto.gallerySections),
+        } satisfies Prisma.ProjectItemUncheckedCreateInput,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -175,7 +207,15 @@ export class ProjectsService {
     try {
       return await this.prisma.projectItem.update({
         where: { id: item.id },
-        data: dto as unknown as Prisma.ProjectItemUpdateInput,
+        data: {
+          ...dto,
+          title: json(dto.title),
+          summary: json(dto.summary),
+          description: json(dto.description),
+          highlights: json(dto.highlights),
+          quickFacts: json(dto.quickFacts),
+          gallerySections: json(dto.gallerySections),
+        } satisfies Prisma.ProjectItemUpdateInput,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { json } from '../common/prisma-json';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
@@ -49,9 +50,12 @@ export class NewsService {
       return await this.prisma.newsPost.create({
         data: {
           ...rest,
+          title: json(rest.title),
+          summary: json(rest.summary),
+          content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-        } as unknown as Prisma.NewsPostUncheckedCreateInput,
+        } satisfies Prisma.NewsPostUncheckedCreateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error, 'Slug bài viết đã tồn tại');
@@ -66,9 +70,12 @@ export class NewsService {
         where: { id: post.id },
         data: {
           ...rest,
+          title: json(rest.title),
+          summary: json(rest.summary),
+          content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
-        } as unknown as Prisma.NewsPostUncheckedUpdateInput,
+        } satisfies Prisma.NewsPostUncheckedUpdateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error, 'Slug bài viết đã tồn tại');
@@ -107,7 +114,10 @@ export class NewsService {
   async createCategory(dto: CreateNewsCategoryDto) {
     try {
       return await this.prisma.newsCategory.create({
-        data: dto as unknown as Prisma.NewsCategoryUncheckedCreateInput,
+        data: {
+          ...dto,
+          name: json(dto.name),
+        } satisfies Prisma.NewsCategoryUncheckedCreateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error, 'Slug chuyên mục đã tồn tại');
@@ -127,7 +137,10 @@ export class NewsService {
     try {
       return await this.prisma.newsCategory.update({
         where: { id: category.id },
-        data: dto as unknown as Prisma.NewsCategoryUncheckedUpdateInput,
+        data: {
+          ...dto,
+          name: json(dto.name),
+        } satisfies Prisma.NewsCategoryUncheckedUpdateInput,
       });
     } catch (error) {
       this.rethrowSlugConflict(error, 'Slug chuyên mục đã tồn tại');

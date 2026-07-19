@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { json } from '../common/prisma-json';
 import { CreateBannerDto } from './dto/create-banner.dto';
 import { UpdateBannerDto } from './dto/update-banner.dto';
 
@@ -29,7 +30,13 @@ export class BannersService {
 
   create(dto: CreateBannerDto) {
     return this.prisma.banner.create({
-      data: dto as unknown as Prisma.BannerCreateInput,
+      data: {
+        ...dto,
+        title: json(dto.title),
+        eyebrow: json(dto.eyebrow),
+        subtitle: json(dto.subtitle),
+        ctaLabel: json(dto.ctaLabel),
+      } satisfies Prisma.BannerCreateInput,
     });
   }
 
@@ -37,7 +44,13 @@ export class BannersService {
     await this.findOne(id);
     return this.prisma.banner.update({
       where: { id },
-      data: dto as unknown as Prisma.BannerUpdateInput,
+      data: {
+        ...dto,
+        title: json(dto.title),
+        eyebrow: json(dto.eyebrow),
+        subtitle: json(dto.subtitle),
+        ctaLabel: json(dto.ctaLabel),
+      } satisfies Prisma.BannerUpdateInput,
     });
   }
 

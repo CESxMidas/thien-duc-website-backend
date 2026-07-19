@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { json } from '../common/prisma-json';
 import { CreateCooperationProjectDto } from './dto/create-cooperation-project.dto';
 import { UpdateCooperationProjectDto } from './dto/update-cooperation-project.dto';
 
@@ -36,7 +37,15 @@ export class CooperationService {
 
   create(dto: CreateCooperationProjectDto) {
     return this.prisma.cooperationProject.create({
-      data: dto as unknown as Prisma.CooperationProjectCreateInput,
+      data: {
+        ...dto,
+        name: json(dto.name),
+        location: json(dto.location),
+        role: json(dto.role),
+        partner: json(dto.partner),
+        scale: json(dto.scale),
+        status: json(dto.status),
+      } satisfies Prisma.CooperationProjectCreateInput,
     });
   }
 
@@ -44,7 +53,15 @@ export class CooperationService {
     await this.findOne(id);
     return this.prisma.cooperationProject.update({
       where: { id },
-      data: dto as unknown as Prisma.CooperationProjectUpdateInput,
+      data: {
+        ...dto,
+        name: json(dto.name),
+        location: json(dto.location),
+        role: json(dto.role),
+        partner: json(dto.partner),
+        scale: json(dto.scale),
+        status: json(dto.status),
+      } satisfies Prisma.CooperationProjectUpdateInput,
     });
   }
 

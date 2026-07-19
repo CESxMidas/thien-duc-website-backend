@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
@@ -63,12 +64,25 @@ export class MailService implements OnModuleInit {
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
+    // `@types/nodemailer` chưa khai `family`, nhưng nodemailer chuyển thẳng
+    // xuống socket connect lúc chạy. Khai bằng intersection `& { family?: number }`
+    // để vẫn type-safe (phần còn lại của options vẫn được kiểm tra đầy đủ), không
+    // dùng `as any` làm mất kiểu.
+    const transportOptions: SMTPTransport.Options & { family?: number } = {
       host,
       port,
       secure: port === 465, // 465 = TLS ngầm; 587 = STARTTLS.
       auth: { user, pass: password },
-    });
+      // Render không tiếp cận được IPv6 → smtp.gmail.com phân giải ra AAAA gây
+      // `connect ENETUNREACH …:587`. Ép IPv4 để nối qua địa chỉ IPv4.
+      family: 4,
+      // Chặn treo lâu khi mạng SMTP không tới được (mặc định nodemailer rất dài:
+      // connection 2 phút, socket 10 phút) — lỗi sớm và được log lại.
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    };
+    this.transporter = nodemailer.createTransport(transportOptions);
 
     // Log quan sát (KHÔNG chứa secret/PII): chỉ host/port/secure + có notifyTo hay
     // không. Không log user/from/password/địa chỉ email.

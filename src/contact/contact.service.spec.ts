@@ -84,6 +84,7 @@ describe('ContactService.create (task →1: email thông báo)', () => {
 
     expect(mail.sendContactNotification).toHaveBeenCalledTimes(1);
     expect(mail.sendContactNotification).toHaveBeenCalledWith({
+      submissionId: savedSubmission.id,
       name: savedSubmission.name,
       phone: savedSubmission.phone,
       email: savedSubmission.email,

@@ -5,6 +5,8 @@ import type { Transporter } from 'nodemailer';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
+  /** ID bản ghi lead — chỉ dùng để đối chiếu log, không phải PII. */
+  submissionId?: string;
   name: string;
   phone: string;
   email?: string | null;
@@ -67,6 +69,14 @@ export class MailService implements OnModuleInit {
       secure: port === 465, // 465 = TLS ngầm; 587 = STARTTLS.
       auth: { user, pass: password },
     });
+
+    // Log quan sát (KHÔNG chứa secret/PII): chỉ host/port/secure + có notifyTo hay
+    // không. Không log user/from/password/địa chỉ email.
+    this.logger.log(
+      `SMTP đã cấu hình: host=${host} port=${port} secure=${port === 465} notifyTo=${
+        this.notifyTo ? 'set' : 'unset'
+      }`,
+    );
   }
 
   get isConfigured(): boolean {
@@ -79,9 +89,19 @@ export class MailService implements OnModuleInit {
    * SMTP) để lượt gửi hỏng không làm hỏng luồng tạo lead.
    */
   async sendContactNotification(data: ContactNotificationData): Promise<void> {
-    if (!this.transporter) return;
+    const ref = data.submissionId ?? 'unknown';
+    if (!this.transporter) {
+      // SMTP chưa cấu hình (đã cảnh báo lúc khởi động) — bỏ qua, lead vẫn đã lưu.
+      this.logger.warn(
+        `Bỏ qua gửi email thông báo liên hệ: SMTP chưa cấu hình (submissionId=${ref}).`,
+      );
+      return;
+    }
+    this.logger.log(
+      `Bắt đầu gửi email thông báo liên hệ (submissionId=${ref}).`,
+    );
     try {
-      await this.transporter.sendMail({
+      const info = (await this.transporter.sendMail({
         from: this.from,
         to: this.notifyTo,
         // Trả lời thẳng cho khách nếu họ để lại email.
@@ -89,11 +109,18 @@ export class MailService implements OnModuleInit {
         subject: `[Website Thiên Đức] Liên hệ mới từ ${data.name}`,
         text: this.buildText(data),
         html: this.buildHtml(data),
-      });
+      })) as { messageId?: string };
+      // `messageId` của Nodemailer an toàn (không chứa secret/PII). KHÔNG log
+      // `info.accepted`/`envelope`/`response` vì có thể chứa địa chỉ người nhận.
+      this.logger.log(
+        `Đã gửi email thông báo liên hệ (submissionId=${ref}, messageId=${
+          info.messageId ?? 'n/a'
+        }).`,
+      );
     } catch (error) {
       // Chỉ log message, tuyệt đối không log transporter/auth để tránh lộ SMTP.
       this.logger.error(
-        `Gửi email thông báo liên hệ thất bại: ${
+        `Gửi email thông báo liên hệ thất bại (submissionId=${ref}): ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

@@ -12,8 +12,8 @@ import { CreateContactSubmissionDto } from './dto/create-contact-submission.dto'
  *   3. Gửi email KHÔNG chặn — vẫn trả về bản ghi đã lưu.
  *   4. Email hỏng (được nuốt lỗi bên trong MailService) không làm hỏng create.
  *
- * `MailService` được mock hoàn toàn nên test không đụng tới SMTP thật — không có
- * host/user/password/secret nào xuất hiện trong test hay output.
+ * `MailService` được mock hoàn toàn nên test không đụng tới Resend thật — không
+ * có API key/secret nào xuất hiện trong test hay output.
  */
 const dto: CreateContactSubmissionDto = {
   name: 'Nguyễn Văn A',

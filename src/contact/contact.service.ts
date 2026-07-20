@@ -19,7 +19,7 @@ export class ContactService {
 
     // Gửi email thông báo KHÔNG chặn response: lead đã lưu, `sendContact-
     // Notification` tự nuốt lỗi nên lượt gửi hỏng cũng không ảnh hưởng tới
-    // client. Không `await` để SMTP chậm (Yahoo/Render ngủ) không kéo dài `201`.
+    // client. Không `await` để email chậm (Resend/Render ngủ) không kéo dài `201`.
     void this.mail.sendContactNotification({
       submissionId: submission.id,
       name: submission.name,

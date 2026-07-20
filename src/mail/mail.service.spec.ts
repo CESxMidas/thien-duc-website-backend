@@ -1,28 +1,18 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
-import * as nodemailer from 'nodemailer';
 import { MailService, type ContactNotificationData } from './mail.service';
 
 /**
- * Kiểm thử lựa chọn nhà cung cấp email (`MAIL_PROVIDER`) và hành vi degrade an
- * toàn. Cả Resend SDK, Nodemailer và DNS lookup đều được mock nên test KHÔNG
- * chạm mạng thật — không API key / SMTP / địa chỉ email thật nào xuất hiện.
+ * Kiểm thử nhà cung cấp email duy nhất (Resend) và hành vi degrade an toàn.
+ * Resend SDK được mock nên test KHÔNG chạm mạng thật — không API key / địa chỉ
+ * email thật nào xuất hiện.
  */
 const mockResendSend = jest.fn();
 jest.mock('resend', () => ({
   Resend: jest.fn().mockImplementation(() => ({
     emails: { send: mockResendSend },
   })),
-}));
-
-const mockSendMail = jest.fn();
-jest.mock('nodemailer', () => ({
-  createTransport: jest.fn(() => ({ sendMail: mockSendMail })),
-}));
-
-jest.mock('node:dns/promises', () => ({
-  lookup: jest.fn().mockResolvedValue({ address: '10.0.0.1', family: 4 }),
 }));
 
 /** Dữ liệu lead mẫu — chứa PII giả để kiểm chứng KHÔNG bị log ra. */
@@ -57,22 +47,12 @@ function makeService(env: Record<string, string | undefined>): MailService {
 }
 
 const RESEND_ENV = {
-  MAIL_PROVIDER: 'resend',
   RESEND_API_KEY: 're_test_key',
   MAIL_FROM: 'Thiên Đức <onboarding@resend.dev>',
   CONTACT_NOTIFY_TO: 'company@gmail.com',
 };
 
-const SMTP_ENV = {
-  SMTP_HOST: 'smtp.example.com',
-  SMTP_PORT: '587',
-  SMTP_USER: 'smtp-user',
-  SMTP_PASSWORD: 'smtp-pass',
-  SMTP_FROM: 'no-reply@example.com',
-  CONTACT_NOTIFY_TO: 'company@gmail.com',
-};
-
-describe('MailService — lựa chọn provider & degrade an toàn', () => {
+describe('MailService — cấu hình Resend & degrade an toàn', () => {
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
@@ -107,35 +87,18 @@ describe('MailService — lựa chọn provider & degrade an toàn', () => {
     }
   }
 
-  it('mặc định dùng SMTP khi MAIL_PROVIDER không đặt', async () => {
-    const service = makeService(SMTP_ENV); // không có MAIL_PROVIDER
-    await service.onModuleInit();
-
-    expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
-    expect(Resend).not.toHaveBeenCalled();
-    expect(service.isConfigured).toBe(true);
-
-    mockSendMail.mockResolvedValue({ messageId: 'smtp-msg-1' });
-    await service.sendContactNotification(data);
-
-    expect(mockSendMail).toHaveBeenCalledTimes(1);
-    expect(mockResendSend).not.toHaveBeenCalled();
-    expectNoPiiLeaked();
-  });
-
-  it('chọn Resend khi MAIL_PROVIDER=resend', async () => {
+  it('cấu hình Resend khi đủ env', () => {
     const service = makeService(RESEND_ENV);
-    await service.onModuleInit();
+    service.onModuleInit();
 
     expect(Resend).toHaveBeenCalledTimes(1);
     expect(Resend).toHaveBeenCalledWith('re_test_key');
-    expect(nodemailer.createTransport).not.toHaveBeenCalled();
     expect(service.isConfigured).toBe(true);
   });
 
   it('thiếu RESEND_API_KEY → bỏ qua an toàn, không gửi, lead vẫn lưu', async () => {
     const service = makeService({ ...RESEND_ENV, RESEND_API_KEY: undefined });
-    await service.onModuleInit();
+    service.onModuleInit();
 
     expect(Resend).not.toHaveBeenCalled();
     expect(service.isConfigured).toBe(false);
@@ -148,12 +111,27 @@ describe('MailService — lựa chọn provider & degrade an toàn', () => {
     expectNoPiiLeaked();
   });
 
-  it('thiếu CONTACT_NOTIFY_TO → bỏ qua an toàn (provider resend)', async () => {
+  it('thiếu MAIL_FROM → bỏ qua an toàn, không gửi', async () => {
+    const service = makeService({ ...RESEND_ENV, MAIL_FROM: undefined });
+    service.onModuleInit();
+
+    expect(Resend).not.toHaveBeenCalled();
+    expect(service.isConfigured).toBe(false);
+    expect(warnSpy).toHaveBeenCalled();
+
+    await expect(
+      service.sendContactNotification(data),
+    ).resolves.toBeUndefined();
+    expect(mockResendSend).not.toHaveBeenCalled();
+    expectNoPiiLeaked();
+  });
+
+  it('thiếu CONTACT_NOTIFY_TO → bỏ qua an toàn', async () => {
     const service = makeService({
       ...RESEND_ENV,
       CONTACT_NOTIFY_TO: undefined,
     });
-    await service.onModuleInit();
+    service.onModuleInit();
 
     expect(Resend).not.toHaveBeenCalled();
     expect(service.isConfigured).toBe(false);
@@ -172,7 +150,7 @@ describe('MailService — lựa chọn provider & degrade an toàn', () => {
       error: null,
     });
     const service = makeService(RESEND_ENV);
-    await service.onModuleInit();
+    service.onModuleInit();
 
     await service.sendContactNotification(data);
 
@@ -199,7 +177,7 @@ describe('MailService — lựa chọn provider & degrade an toàn', () => {
       error: { name: 'validation_error', message: 'Domain not verified' },
     });
     const service = makeService(RESEND_ENV);
-    await service.onModuleInit();
+    service.onModuleInit();
 
     await expect(
       service.sendContactNotification(data),
@@ -216,7 +194,7 @@ describe('MailService — lựa chọn provider & degrade an toàn', () => {
   it('Resend ném exception → nuốt lỗi, không làm sập create', async () => {
     mockResendSend.mockRejectedValue(new Error('network down'));
     const service = makeService(RESEND_ENV);
-    await service.onModuleInit();
+    service.onModuleInit();
 
     await expect(
       service.sendContactNotification(data),

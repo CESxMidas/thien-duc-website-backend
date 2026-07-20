@@ -4,6 +4,8 @@ coverage
 *.log
 
 # Keep environment variables out of version control
-.env
+# (.env, .env.local, .env.production, .env.* — trừ template .env.example)
+.env*
+!.env.example
 
 /generated/prisma

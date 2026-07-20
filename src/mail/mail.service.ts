@@ -4,6 +4,7 @@ import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { lookup } from 'node:dns/promises';
+import { Resend } from 'resend';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
@@ -17,6 +18,9 @@ export interface ContactNotificationData {
   ipAddress?: string | null;
   createdAt: Date;
 }
+
+/** Nhà cung cấp gửi email. Mặc định `smtp` để giữ hành vi cũ. */
+type MailProvider = 'smtp' | 'resend';
 
 /** Hiển thị thời gian theo giờ VN (UTC+7) — dữ liệu lưu UTC trong DB. */
 const VN_DATETIME = new Intl.DateTimeFormat('vi-VN', {
@@ -36,20 +40,72 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Gửi email qua SMTP. Theo cùng khuôn với `CloudinaryService`: nếu thiếu cấu
- * hình thì **degrade thành no-op** (chỉ log cảnh báo) thay vì làm sập app —
- * lead vẫn được lưu bình thường, chỉ là không có email báo.
+ * Gửi email thông báo có lead mới. Hỗ trợ 2 nhà cung cấp qua `MAIL_PROVIDER`:
+ *
+ * - `resend` (khuyến nghị trên Render): gọi Resend HTTPS API — không vướng chặn
+ *   cổng SMTP outbound / IPv6 như Gmail SMTP.
+ * - `smtp` (mặc định): giữ nguyên hành vi Nodemailer cũ.
+ *
+ * Theo cùng khuôn với `CloudinaryService`: nếu thiếu cấu hình thì **degrade
+ * thành no-op** (chỉ log cảnh báo) thay vì làm sập app — lead vẫn được lưu bình
+ * thường, chỉ là không có email báo.
  */
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
+  private provider: MailProvider = 'smtp';
   private transporter: Transporter | null = null;
+  private resend: Resend | null = null;
   private from = '';
   private notifyTo = '';
 
   constructor(private readonly config: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
+    this.provider =
+      (this.config.get<string>('MAIL_PROVIDER') ?? 'smtp')
+        .trim()
+        .toLowerCase() === 'resend'
+        ? 'resend'
+        : 'smtp';
+
+    if (this.provider === 'resend') {
+      this.initResend();
+      return;
+    }
+    await this.initSmtp();
+  }
+
+  /** Khởi tạo nhà cung cấp Resend (HTTPS API). */
+  private initResend(): void {
+    const apiKey = this.config.get<string>('RESEND_API_KEY');
+    // from: ưu tiên MAIL_FROM, fallback SMTP_FROM để tái dùng cấu hình cũ.
+    this.from =
+      this.config.get<string>('MAIL_FROM') ??
+      this.config.get<string>('SMTP_FROM') ??
+      '';
+    this.notifyTo = this.config.get<string>('CONTACT_NOTIFY_TO') ?? '';
+
+    if (!apiKey || !this.from || !this.notifyTo) {
+      this.logger.warn(
+        `Thiếu cấu hình Resend — email thông báo liên hệ bị bỏ qua cho tới khi cấu hình đủ (lead vẫn được lưu). provider=resend apiKey=${
+          apiKey ? 'set' : 'missing'
+        } from=${this.from ? 'set' : 'missing'} notifyTo=${
+          this.notifyTo ? 'set' : 'missing'
+        }`,
+      );
+      return;
+    }
+
+    this.resend = new Resend(apiKey);
+    // Log quan sát (KHÔNG chứa secret/PII): chỉ cờ present/missing.
+    this.logger.log(
+      'Email provider=resend đã cấu hình: apiKey=set from=set notifyTo=set',
+    );
+  }
+
+  /** Khởi tạo nhà cung cấp SMTP (Nodemailer) — hành vi cũ, giữ nguyên. */
+  private async initSmtp(): Promise<void> {
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     const password = this.config.get<string>('SMTP_PASSWORD');
@@ -106,22 +162,79 @@ export class MailService implements OnModuleInit {
     // Log quan sát (KHÔNG chứa secret/PII): host GỐC/port/secure/family/ipv4Resolved
     // + có notifyTo hay không. KHÔNG log user/from/password/địa chỉ email/IP đã phân giải.
     this.logger.log(
-      `SMTP đã cấu hình: host=${host} port=${port} secure=${port === 465} family=4 ipv4Resolved=true notifyTo=${
-        this.notifyTo ? 'set' : 'unset'
-      }`,
+      `Email provider=smtp đã cấu hình: host=${host} port=${port} secure=${
+        port === 465
+      } family=4 ipv4Resolved=true notifyTo=${this.notifyTo ? 'set' : 'unset'}`,
     );
   }
 
   get isConfigured(): boolean {
-    return this.transporter !== null;
+    return this.provider === 'resend'
+      ? this.resend !== null
+      : this.transporter !== null;
   }
 
   /**
    * Gửi email báo có lead mới. **Không bao giờ ném lỗi ra ngoài** — lead đã được
-   * lưu DB nên gửi mail chỉ là phụ; lỗi được log lại (không kèm cấu hình/secret
-   * SMTP) để lượt gửi hỏng không làm hỏng luồng tạo lead.
+   * lưu DB nên gửi mail chỉ là phụ; lỗi được log lại (không kèm cấu hình/secret)
+   * để lượt gửi hỏng không làm hỏng luồng tạo lead.
    */
   async sendContactNotification(data: ContactNotificationData): Promise<void> {
+    if (this.provider === 'resend') {
+      await this.sendViaResend(data);
+      return;
+    }
+    await this.sendViaSmtp(data);
+  }
+
+  /** Gửi qua Resend HTTPS API. Tự nuốt lỗi, chỉ log an toàn. */
+  private async sendViaResend(data: ContactNotificationData): Promise<void> {
+    const ref = data.submissionId ?? 'unknown';
+    if (!this.resend) {
+      // Resend chưa cấu hình (đã cảnh báo lúc khởi động) — bỏ qua, lead vẫn đã lưu.
+      this.logger.warn(
+        `Bỏ qua gửi email thông báo liên hệ: Resend chưa cấu hình (submissionId=${ref}).`,
+      );
+      return;
+    }
+    this.logger.log(
+      `Bắt đầu gửi email thông báo liên hệ qua Resend (submissionId=${ref}).`,
+    );
+    try {
+      const { data: sent, error } = await this.resend.emails.send({
+        from: this.from,
+        to: this.notifyTo,
+        // Trả lời thẳng cho khách nếu họ để lại email.
+        replyTo: data.email || undefined,
+        subject: `[Website Thiên Đức] Liên hệ mới từ ${data.name}`,
+        text: this.buildText(data),
+        html: this.buildHtml(data),
+      });
+      if (error) {
+        // Resend trả lỗi trong body (không throw). Chỉ log name/message an toàn.
+        this.logger.error(
+          `Gửi email thông báo liên hệ qua Resend thất bại (submissionId=${ref}): ${error.name} - ${error.message}`,
+        );
+        return;
+      }
+      // `id` của Resend an toàn (không chứa secret/PII).
+      this.logger.log(
+        `Đã gửi email thông báo liên hệ qua Resend (submissionId=${ref}, messageId=${
+          sent?.id ?? 'n/a'
+        }).`,
+      );
+    } catch (error) {
+      // Chỉ log message, tuyệt đối không log API key / payload để tránh lộ PII.
+      this.logger.error(
+        `Gửi email thông báo liên hệ qua Resend thất bại (submissionId=${ref}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /** Gửi qua SMTP (Nodemailer) — hành vi cũ, giữ nguyên. */
+  private async sendViaSmtp(data: ContactNotificationData): Promise<void> {
     const ref = data.submissionId ?? 'unknown';
     if (!this.transporter) {
       // SMTP chưa cấu hình (đã cảnh báo lúc khởi động) — bỏ qua, lead vẫn đã lưu.
@@ -131,7 +244,7 @@ export class MailService implements OnModuleInit {
       return;
     }
     this.logger.log(
-      `Bắt đầu gửi email thông báo liên hệ (submissionId=${ref}).`,
+      `Bắt đầu gửi email thông báo liên hệ qua SMTP (submissionId=${ref}).`,
     );
     try {
       const info = (await this.transporter.sendMail({
@@ -146,14 +259,14 @@ export class MailService implements OnModuleInit {
       // `messageId` của Nodemailer an toàn (không chứa secret/PII). KHÔNG log
       // `info.accepted`/`envelope`/`response` vì có thể chứa địa chỉ người nhận.
       this.logger.log(
-        `Đã gửi email thông báo liên hệ (submissionId=${ref}, messageId=${
+        `Đã gửi email thông báo liên hệ qua SMTP (submissionId=${ref}, messageId=${
           info.messageId ?? 'n/a'
         }).`,
       );
     } catch (error) {
       // Chỉ log message, tuyệt đối không log transporter/auth để tránh lộ SMTP.
       this.logger.error(
-        `Gửi email thông báo liên hệ thất bại (submissionId=${ref}): ${
+        `Gửi email thông báo liên hệ qua SMTP thất bại (submissionId=${ref}): ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

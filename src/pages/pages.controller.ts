@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -56,8 +57,8 @@ export class PagesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Post()
-  create(@Body() dto: CreatePageDto) {
-    return this.pagesService.create(dto);
+  create(@Body() dto: CreatePageDto, @CurrentUser() user: { role: string }) {
+    return this.pagesService.create(dto, user.role);
   }
 
   @ApiBearerAuth()

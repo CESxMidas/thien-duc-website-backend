@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -93,8 +94,8 @@ export class ProjectsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Post()
-  create(@Body() dto: CreateProjectDto) {
-    return this.projectsService.create(dto);
+  create(@Body() dto: CreateProjectDto, @CurrentUser() user: { role: string }) {
+    return this.projectsService.create(dto, user.role);
   }
 
   @ApiBearerAuth()

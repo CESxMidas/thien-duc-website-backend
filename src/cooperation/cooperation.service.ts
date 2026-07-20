@@ -6,6 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
+import { initialContentStatus } from '../common/content-approval';
 import { CreateCooperationProjectDto } from './dto/create-cooperation-project.dto';
 import { UpdateCooperationProjectDto } from './dto/update-cooperation-project.dto';
 
@@ -35,7 +36,7 @@ export class CooperationService {
     return project;
   }
 
-  create(dto: CreateCooperationProjectDto) {
+  create(dto: CreateCooperationProjectDto, actorRole?: string) {
     return this.prisma.cooperationProject.create({
       data: {
         ...dto,
@@ -45,6 +46,9 @@ export class CooperationService {
         partner: json(dto.partner),
         scale: json(dto.scale),
         status: json(dto.status),
+        // `status` ở trên là trạng thái mô tả (chữ) của dự án; `contentStatus`
+        // mới là bậc thang duyệt. SUPER_ADMIN xuất bản ngay; vai trò khác nháp.
+        contentStatus: initialContentStatus(actorRole),
       } satisfies Prisma.CooperationProjectCreateInput,
     });
   }

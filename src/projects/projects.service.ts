@@ -6,6 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
+import { initialContentStatus } from '../common/content-approval';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -103,7 +104,7 @@ export class ProjectsService {
     return item;
   }
 
-  async create(dto: CreateProjectDto) {
+  async create(dto: CreateProjectDto, actorRole?: string) {
     try {
       return await this.prisma.project.create({
         data: {
@@ -117,6 +118,8 @@ export class ProjectsService {
           quickFacts: json(dto.quickFacts),
           gallerySections: json(dto.gallerySections),
           mapLocation: json(dto.mapLocation),
+          // SUPER_ADMIN bỏ qua luồng duyệt → dự án xuất bản ngay; vai trò khác nháp.
+          contentStatus: initialContentStatus(actorRole),
         } satisfies Prisma.ProjectCreateInput,
       });
     } catch (error) {

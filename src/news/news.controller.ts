@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -112,8 +113,11 @@ export class NewsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Post()
-  create(@Body() dto: CreateNewsPostDto) {
-    return this.newsService.create(dto);
+  create(
+    @Body() dto: CreateNewsPostDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.newsService.create(dto, user.role);
   }
 
   @ApiBearerAuth()

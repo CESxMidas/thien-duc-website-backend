@@ -6,6 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
+import { initialContentStatus } from '../common/content-approval';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 
@@ -34,13 +35,15 @@ export class PagesService {
     return page;
   }
 
-  async create(dto: CreatePageDto) {
+  async create(dto: CreatePageDto, actorRole?: string) {
     try {
       return await this.prisma.page.create({
         data: {
           ...dto,
           title: json(dto.title),
           content: json(dto.content),
+          // SUPER_ADMIN bỏ qua luồng duyệt → trang xuất bản ngay; vai trò khác nháp.
+          status: initialContentStatus(actorRole),
         } satisfies Prisma.PageCreateInput,
       });
     } catch (error) {

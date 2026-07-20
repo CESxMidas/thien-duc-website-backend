@@ -6,6 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
+import { initialContentStatus } from '../common/content-approval';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
@@ -44,8 +45,12 @@ export class NewsService {
     return post;
   }
 
-  async create(dto: CreateNewsPostDto) {
+  async create(dto: CreateNewsPostDto, actorRole?: string) {
     const { eventDate, scheduledAt, ...rest } = dto;
+    // SUPER_ADMIN bỏ qua luồng duyệt: bài đăng ngay (PUBLISHED) kèm publishedAt
+    // để trang tin công khai (sắp theo publishedAt) hiển thị đúng thứ tự. Vai
+    // trò khác lưu nháp như cũ.
+    const status = initialContentStatus(actorRole);
     try {
       return await this.prisma.newsPost.create({
         data: {
@@ -55,6 +60,9 @@ export class NewsService {
           content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+          status,
+          publishedAt:
+            status === ContentStatus.PUBLISHED ? new Date() : undefined,
         } satisfies Prisma.NewsPostUncheckedCreateInput,
       });
     } catch (error) {

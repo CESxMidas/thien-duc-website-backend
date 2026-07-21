@@ -69,3 +69,66 @@ describe('NewsService.create (bypass duyệt cho SUPER_ADMIN)', () => {
     expect(data.status).toBe(ContentStatus.DRAFT);
   });
 });
+
+/**
+ * ADMIN-SUPER-ADMIN-GLOBAL-ADMIN-WORKFLOW-FIX-M1: `updateStatus` áp thẳng trạng
+ * thái đích, không ép đi qua PENDING. Nhờ vậy SUPER_ADMIN đăng thẳng bài nháp
+ * (DRAFT → PUBLISHED) từ Admin, và bài được gắn publishedAt ở lần đăng đầu.
+ * Quyền gọi route đã do `@Roles(ADMIN, SUPER_ADMIN)` chốt ở controller.
+ */
+describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => {
+  let service: NewsService;
+  let prisma: {
+    newsPost: { findUnique: jest.Mock; update: jest.Mock };
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      newsPost: { findUnique: jest.fn(), update: jest.fn() },
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [NewsService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+
+    service = moduleRef.get(NewsService);
+    prisma.newsPost.update.mockImplementation(
+      (args: { data: Record<string, unknown> }) => ({ id: 'n1', ...args.data }),
+    );
+  });
+
+  it('DRAFT → PUBLISHED trực tiếp, set publishedAt lần đầu', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.DRAFT,
+      publishedAt: null,
+    });
+
+    await service.updateStatus('bai-viet-moi', ContentStatus.PUBLISHED);
+
+    const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
+      { data: { status: ContentStatus; publishedAt?: Date | null } },
+    ];
+    expect(data.status).toBe(ContentStatus.PUBLISHED);
+    expect(data.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it('PUBLISHED → DRAFT (trả về nháp), giữ publishedAt cũ', async () => {
+    const firstPublishedAt = new Date('2026-07-01T00:00:00Z');
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.PUBLISHED,
+      publishedAt: firstPublishedAt,
+    });
+
+    await service.updateStatus('bai-viet-moi', ContentStatus.DRAFT);
+
+    const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
+      { data: { status: ContentStatus; publishedAt?: Date | null } },
+    ];
+    expect(data.status).toBe(ContentStatus.DRAFT);
+    expect(data.publishedAt).toBe(firstPublishedAt);
+  });
+});

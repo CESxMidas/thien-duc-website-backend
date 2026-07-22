@@ -96,6 +96,10 @@ export class MediaController {
     return this.mediaService.create(dto, user.id);
   }
 
+  // Xóa ảnh là thao tác phá hủy: gỡ khỏi Cloudinary và có thể làm hỏng trang/dự
+  // án/banner đang dùng ảnh. Chỉ ADMIN trở lên — override role EDITOR+ ở cấp
+  // controller (method-level @Roles thắng nhờ getAllAndOverride ở RolesGuard).
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.mediaService.remove(id);

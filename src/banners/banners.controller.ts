@@ -49,9 +49,13 @@ export class BannersController {
     return this.bannersService.findOne(id);
   }
 
+  // Banner là nội dung trang chủ, mức hiển thị cao và không có luồng duyệt riêng.
+  // Vì vậy mọi thao tác thay đổi (tạo/sửa/bật-tắt/sắp xếp/xóa) chỉ cho ADMIN trở
+  // lên — EDITOR không được tự đẩy banner lên trang chủ.
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Patch('reorder')
   reorder(@Body() dto: ReorderBannersDto) {
     return this.bannersService.reorder(dto.bannerIds);
@@ -59,15 +63,17 @@ export class BannersController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Post()
   create(@Body() dto: CreateBannerDto) {
     return this.bannersService.create(dto);
   }
 
+  // Bật/tắt banner (`isActive`) đi qua chính route update này — chốt ADMIN+ ở đây
+  // là đã bao trọn thao tác toggle, không cần route riêng.
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBannerDto) {
     return this.bannersService.update(id, dto);

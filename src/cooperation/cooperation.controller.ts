@@ -84,12 +84,19 @@ export class CooperationController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Duyệt/trả lại nội dung — chỉ Admin trở lên.' })
+  @ApiOperation({
+    summary:
+      'Đổi trạng thái nội dung. EDITOR chỉ gửi duyệt (DRAFT → PENDING); ADMIN trở lên duyệt/đăng/gỡ.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateContentStatusDto) {
-    return this.cooperationService.updateStatus(id, dto.status);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateContentStatusDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.cooperationService.updateStatus(id, dto.status, user.role);
   }
 
   @ApiBearerAuth()

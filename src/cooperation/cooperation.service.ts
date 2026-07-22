@@ -6,7 +6,10 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import { initialContentStatus } from '../common/content-approval';
+import {
+  assertContentStatusTransition,
+  initialContentStatus,
+} from '../common/content-approval';
 import { CreateCooperationProjectDto } from './dto/create-cooperation-project.dto';
 import { UpdateCooperationProjectDto } from './dto/update-cooperation-project.dto';
 
@@ -69,8 +72,10 @@ export class CooperationService {
     });
   }
 
-  async updateStatus(id: string, status: ContentStatus) {
-    await this.findOne(id);
+  async updateStatus(id: string, status: ContentStatus, actorRole?: string) {
+    const project = await this.findOne(id);
+    // EDITOR chỉ được gửi duyệt (DRAFT → PENDING); ADMIN trở lên đặt tùy ý.
+    assertContentStatusTransition(actorRole, project.contentStatus, status);
     return this.prisma.cooperationProject.update({
       where: { id },
       data: { contentStatus: status },

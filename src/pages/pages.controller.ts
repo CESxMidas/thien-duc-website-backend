@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -70,14 +70,19 @@ export class PagesController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Đổi trạng thái nội dung. EDITOR chỉ gửi duyệt (DRAFT → PENDING); ADMIN trở lên duyệt/đăng/gỡ.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/status')
   updateStatus(
     @Param('slug') slug: string,
     @Body() dto: UpdateContentStatusDto,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.pagesService.updateStatus(slug, dto.status);
+    return this.pagesService.updateStatus(slug, dto.status, user.role);
   }
 
   @ApiBearerAuth()

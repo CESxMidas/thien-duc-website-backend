@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ContentStatus, Role } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -71,12 +72,12 @@ describe('NewsService.create (bypass duyệt cho SUPER_ADMIN)', () => {
 });
 
 /**
- * ADMIN-SUPER-ADMIN-GLOBAL-ADMIN-WORKFLOW-FIX-M1: `updateStatus` áp thẳng trạng
- * thái đích, không ép đi qua PENDING. Nhờ vậy SUPER_ADMIN đăng thẳng bài nháp
- * (DRAFT → PUBLISHED) từ Admin, và bài được gắn publishedAt ở lần đăng đầu.
- * Quyền gọi route đã do `@Roles(ADMIN, SUPER_ADMIN)` chốt ở controller.
+ * ADMIN-CONTENT-STATUS-WORKFLOW-CONSISTENCY-M1: `updateStatus` áp thẳng trạng
+ * thái đích cho ADMIN/SUPER_ADMIN (SUPER_ADMIN đăng thẳng DRAFT → PUBLISHED), và
+ * chốt mịn quyền theo vai trò qua `assertContentStatusTransition`: EDITOR chỉ được
+ * gửi duyệt (DRAFT → PENDING), không đăng thẳng.
  */
-describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => {
+describe('NewsService.updateStatus (đổi trạng thái + chốt quyền vai trò)', () => {
   let service: NewsService;
   let prisma: {
     newsPost: { findUnique: jest.Mock; update: jest.Mock };
@@ -97,7 +98,7 @@ describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => 
     );
   });
 
-  it('DRAFT → PUBLISHED trực tiếp, set publishedAt lần đầu', async () => {
+  it('SUPER_ADMIN: DRAFT → PUBLISHED trực tiếp, set publishedAt lần đầu', async () => {
     prisma.newsPost.findUnique.mockResolvedValue({
       id: 'n1',
       slug: 'bai-viet-moi',
@@ -105,7 +106,11 @@ describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => 
       publishedAt: null,
     });
 
-    await service.updateStatus('bai-viet-moi', ContentStatus.PUBLISHED);
+    await service.updateStatus(
+      'bai-viet-moi',
+      ContentStatus.PUBLISHED,
+      Role.SUPER_ADMIN,
+    );
 
     const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
       { data: { status: ContentStatus; publishedAt?: Date | null } },
@@ -114,7 +119,27 @@ describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => 
     expect(data.publishedAt).toBeInstanceOf(Date);
   });
 
-  it('PUBLISHED → DRAFT (trả về nháp), giữ publishedAt cũ', async () => {
+  it('ADMIN: PENDING → PUBLISHED (duyệt & đăng)', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.PENDING,
+      publishedAt: null,
+    });
+
+    await service.updateStatus(
+      'bai-viet-moi',
+      ContentStatus.PUBLISHED,
+      Role.ADMIN,
+    );
+
+    const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
+      { data: { status: ContentStatus } },
+    ];
+    expect(data.status).toBe(ContentStatus.PUBLISHED);
+  });
+
+  it('ADMIN: PUBLISHED → DRAFT (trả về nháp), giữ publishedAt cũ', async () => {
     const firstPublishedAt = new Date('2026-07-01T00:00:00Z');
     prisma.newsPost.findUnique.mockResolvedValue({
       id: 'n1',
@@ -123,12 +148,67 @@ describe('NewsService.updateStatus (đổi trạng thái trực tiếp)', () => 
       publishedAt: firstPublishedAt,
     });
 
-    await service.updateStatus('bai-viet-moi', ContentStatus.DRAFT);
+    await service.updateStatus('bai-viet-moi', ContentStatus.DRAFT, Role.ADMIN);
 
     const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
       { data: { status: ContentStatus; publishedAt?: Date | null } },
     ];
     expect(data.status).toBe(ContentStatus.DRAFT);
     expect(data.publishedAt).toBe(firstPublishedAt);
+  });
+
+  it('EDITOR: DRAFT → PENDING (gửi duyệt) được phép', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.DRAFT,
+      publishedAt: null,
+    });
+
+    await service.updateStatus(
+      'bai-viet-moi',
+      ContentStatus.PENDING,
+      Role.EDITOR,
+    );
+
+    const [{ data }] = prisma.newsPost.update.mock.calls[0] as [
+      { data: { status: ContentStatus } },
+    ];
+    expect(data.status).toBe(ContentStatus.PENDING);
+  });
+
+  it('EDITOR: DRAFT → PUBLISHED bị chặn (403), không ghi DB', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.DRAFT,
+      publishedAt: null,
+    });
+
+    await expect(
+      service.updateStatus(
+        'bai-viet-moi',
+        ContentStatus.PUBLISHED,
+        Role.EDITOR,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.newsPost.update).not.toHaveBeenCalled();
+  });
+
+  it('EDITOR: PENDING → PUBLISHED bị chặn (403)', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue({
+      id: 'n1',
+      slug: 'bai-viet-moi',
+      status: ContentStatus.PENDING,
+      publishedAt: null,
+    });
+
+    await expect(
+      service.updateStatus(
+        'bai-viet-moi',
+        ContentStatus.PUBLISHED,
+        Role.EDITOR,
+      ),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

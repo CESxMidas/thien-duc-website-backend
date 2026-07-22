@@ -6,7 +6,10 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import { initialContentStatus } from '../common/content-approval';
+import {
+  assertContentStatusTransition,
+  initialContentStatus,
+} from '../common/content-approval';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 
@@ -67,8 +70,10 @@ export class PagesService {
     }
   }
 
-  async updateStatus(slug: string, status: ContentStatus) {
+  async updateStatus(slug: string, status: ContentStatus, actorRole?: string) {
     const page = await this.findBySlug(slug);
+    // EDITOR chỉ được gửi duyệt (DRAFT → PENDING); ADMIN trở lên đặt tùy ý.
+    assertContentStatusTransition(actorRole, page.status, status);
     return this.prisma.page.update({
       where: { id: page.id },
       data: { status },

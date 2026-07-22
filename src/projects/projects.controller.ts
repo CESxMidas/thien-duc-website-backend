@@ -107,15 +107,19 @@ export class ProjectsController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Duyệt/trả lại nội dung — chỉ Admin trở lên.' })
+  @ApiOperation({
+    summary:
+      'Đổi trạng thái nội dung. EDITOR chỉ gửi duyệt (DRAFT → PENDING); ADMIN trở lên duyệt/đăng/gỡ.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/status')
   updateStatus(
     @Param('slug') slug: string,
     @Body() dto: UpdateContentStatusDto,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.projectsService.updateStatus(slug, dto.status);
+    return this.projectsService.updateStatus(slug, dto.status, user.role);
   }
 
   @ApiBearerAuth()

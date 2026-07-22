@@ -6,7 +6,10 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import { initialContentStatus } from '../common/content-approval';
+import {
+  assertContentStatusTransition,
+  initialContentStatus,
+} from '../common/content-approval';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
@@ -90,8 +93,10 @@ export class NewsService {
     }
   }
 
-  async updateStatus(slug: string, status: ContentStatus) {
+  async updateStatus(slug: string, status: ContentStatus, actorRole?: string) {
     const post = await this.findBySlug(slug);
+    // EDITOR chỉ được gửi duyệt (DRAFT → PENDING); ADMIN trở lên đặt tùy ý.
+    assertContentStatusTransition(actorRole, post.status, status);
     // Giữ nguyên publishedAt của lần đăng đầu tiên khi bài được đăng lại,
     // để thứ tự hiển thị ngoài trang tin không nhảy lung tung sau mỗi lần sửa.
     const publishedAt =

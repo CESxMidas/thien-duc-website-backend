@@ -44,6 +44,10 @@ const PUBLIC_FIELDS = {
   name: true,
   role: true,
   isActive: true,
+  // NULL = tài khoản do lời mời tạo ra, chưa tự đặt mật khẩu (Admin hiển thị
+  // "Chờ thiết lập"). An toàn để lộ: chỉ là mốc thời gian trạng thái, không
+  // phải token/hash/mật khẩu.
+  setupCompletedAt: true,
   createdAt: true,
 } as const;
 

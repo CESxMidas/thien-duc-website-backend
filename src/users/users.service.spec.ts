@@ -98,6 +98,32 @@ describe('UsersService', () => {
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
   });
 
+  describe('findAll', () => {
+    it('chọn setupCompletedAt trong select, KHÔNG chọn passwordHash', async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      await service.findAll();
+
+      const call = firstCallArg<{ select: Record<string, unknown> }>(
+        prisma.user.findMany,
+      );
+      expect(call.select.setupCompletedAt).toBe(true);
+      expect(call.select).not.toHaveProperty('passwordHash');
+    });
+
+    it('trả về setupCompletedAt của mỗi tài khoản (pending = null, hoàn tất = có mốc)', async () => {
+      const completed = new Date('2026-07-01T00:00:00Z');
+      prisma.user.findMany.mockResolvedValue([
+        { ...editor, setupCompletedAt: null },
+        { ...superAdmin, setupCompletedAt: completed },
+      ]);
+
+      const list = await service.findAll();
+
+      expect(list[0].setupCompletedAt).toBeNull();
+      expect(list[1].setupCompletedAt).toBe(completed);
+    });
+  });
+
   describe('findOne', () => {
     it('báo 404 khi không có tài khoản', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
@@ -110,6 +136,26 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue(editor);
       const found = await service.findOne(editor.id);
       expect(found).not.toHaveProperty('passwordHash');
+    });
+
+    it('chọn setupCompletedAt trong select detail, KHÔNG chọn passwordHash', async () => {
+      prisma.user.findUnique.mockResolvedValue(editor);
+      await service.findOne(editor.id);
+
+      const call = firstCallArg<{ select: Record<string, unknown> }>(
+        prisma.user.findUnique,
+      );
+      expect(call.select.setupCompletedAt).toBe(true);
+      expect(call.select).not.toHaveProperty('passwordHash');
+    });
+
+    it('trả setupCompletedAt của tài khoản chờ thiết lập (null)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...editor,
+        setupCompletedAt: null,
+      });
+      const found = await service.findOne(editor.id);
+      expect(found).toHaveProperty('setupCompletedAt', null);
     });
   });
 

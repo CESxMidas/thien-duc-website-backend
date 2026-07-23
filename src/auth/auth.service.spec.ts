@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   UnauthorizedException,
@@ -7,12 +8,16 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
+import { hashOpaqueToken } from '../common/utils/opaque-token.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 
 jest.mock('bcrypt');
 const mockedCompare = bcrypt.compare as jest.MockedFunction<
   (a: string, b: string) => Promise<boolean>
+>;
+const mockedHash = bcrypt.hash as jest.MockedFunction<
+  (data: string, rounds: number) => Promise<string>
 >;
 
 /** Tham số đầu tiên của lần gọi mock đầu tiên, có kiểu rõ ràng. */
@@ -42,6 +47,12 @@ describe('AuthService', () => {
       updateMany: jest.Mock;
       create: jest.Mock;
     };
+    accountInvitation: {
+      findFirst: jest.Mock;
+      updateMany: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -53,6 +64,12 @@ describe('AuthService', () => {
         updateMany: jest.fn(),
         create: jest.fn(),
       },
+      accountInvitation: {
+        findFirst: jest.fn(),
+        updateMany: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+      },
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -69,6 +86,7 @@ describe('AuthService', () => {
 
     service = moduleRef.get(AuthService);
     jest.clearAllMocks();
+    mockedHash.mockResolvedValue('hashed-new-password');
   });
 
   describe('login', () => {
@@ -190,6 +208,62 @@ describe('AuthService', () => {
         service.login(activeUser.email, 'MatKhau123'),
       ).resolves.toHaveProperty('accessToken');
     });
+
+    // CMS-ACCOUNT-INVITATION-PHASE2B: chặn đăng nhập tài khoản chờ thiết lập.
+    describe('cổng chặn tài khoản chờ thiết lập (setupCompletedAt = null)', () => {
+      const pendingUser = {
+        ...activeUser,
+        setupCompletedAt: null as Date | null,
+      };
+
+      it('từ chối đăng nhập khi setupCompletedAt = null', async () => {
+        prisma.user.findUnique.mockResolvedValue(pendingUser);
+
+        await expect(service.login(pendingUser.email, 'batky')).rejects.toThrow(
+          new UnauthorizedException('Tài khoản chưa hoàn tất thiết lập.'),
+        );
+      });
+
+      it('KHÔNG so mật khẩu với placeholder hash cho tài khoản chờ thiết lập', async () => {
+        prisma.user.findUnique.mockResolvedValue(pendingUser);
+
+        await expect(
+          service.login(pendingUser.email, 'batky'),
+        ).rejects.toThrow();
+        expect(mockedCompare).not.toHaveBeenCalled();
+      });
+
+      it('KHÔNG tăng failedLoginAttempts / đổi lockedUntil cho tài khoản chờ thiết lập', async () => {
+        prisma.user.findUnique.mockResolvedValue(pendingUser);
+
+        await expect(
+          service.login(pendingUser.email, 'batky'),
+        ).rejects.toThrow();
+        expect(prisma.user.update).not.toHaveBeenCalled();
+      });
+
+      it('KHÔNG cấp token cho tài khoản chờ thiết lập', async () => {
+        prisma.user.findUnique.mockResolvedValue(pendingUser);
+
+        await expect(
+          service.login(pendingUser.email, 'batky'),
+        ).rejects.toThrow();
+        expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      });
+
+      it('tài khoản đã thiết lập (setupCompletedAt != null) vẫn đăng nhập bình thường', async () => {
+        prisma.user.findUnique.mockResolvedValue({
+          ...activeUser,
+          setupCompletedAt: new Date(),
+        });
+        mockedCompare.mockResolvedValue(true);
+
+        await expect(
+          service.login(activeUser.email, 'MatKhau123'),
+        ).resolves.toHaveProperty('accessToken');
+        expect(mockedCompare).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe('refresh', () => {
@@ -281,6 +355,164 @@ describe('AuthService', () => {
       await expect(service.getProfile('da-xoa')).rejects.toBeInstanceOf(
         HttpException,
       );
+    });
+  });
+
+  describe('validateInvitationToken', () => {
+    const token = 'raw-invitation-token';
+
+    it('trả valid:true khi lời mời còn hiệu lực và tài khoản đủ điều kiện', async () => {
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        user: { isActive: true, setupCompletedAt: null },
+      });
+
+      await expect(service.validateInvitationToken(token)).resolves.toEqual({
+        valid: true,
+      });
+      // So khớp bằng hash, không bao giờ truyền token thô vào truy vấn where trực tiếp.
+      const call = firstCallArg<{ where: { tokenHash: string } }>(
+        prisma.accountInvitation.findFirst,
+      );
+      expect(call.where.tokenHash).toBe(hashOpaqueToken(token));
+    });
+
+    it('trả valid:false khi không tìm thấy lời mời (hết hạn/đã dùng/đã thu hồi)', async () => {
+      prisma.accountInvitation.findFirst.mockResolvedValue(null);
+      await expect(service.validateInvitationToken(token)).resolves.toEqual({
+        valid: false,
+      });
+    });
+
+    it('trả valid:false khi tài khoản đã bị vô hiệu hóa', async () => {
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        user: { isActive: false, setupCompletedAt: null },
+      });
+      await expect(service.validateInvitationToken(token)).resolves.toEqual({
+        valid: false,
+      });
+    });
+
+    it('trả valid:false khi tài khoản đã hoàn tất thiết lập', async () => {
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        user: { isActive: true, setupCompletedAt: new Date() },
+      });
+      await expect(service.validateInvitationToken(token)).resolves.toEqual({
+        valid: false,
+      });
+    });
+
+    it('input dị dạng không làm văng lỗi 500 — trả valid:false', async () => {
+      prisma.accountInvitation.findFirst.mockRejectedValue(
+        new Error('DB lỗi bất ngờ'),
+      );
+      await expect(service.validateInvitationToken('   ')).resolves.toEqual({
+        valid: false,
+      });
+    });
+
+    it('không lộ email/tên/vai trò/id trong response', async () => {
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        user: { isActive: true, setupCompletedAt: null },
+      });
+      const result = await service.validateInvitationToken(token);
+      expect(Object.keys(result)).toEqual(['valid']);
+    });
+  });
+
+  describe('acceptInvitation', () => {
+    const dto = {
+      token: 'raw-invitation-token',
+      newPassword: 'MatKhauMoi123',
+      confirmPassword: 'MatKhauMoi123',
+    };
+    const invitationRow = { id: 'inv-1', userId: 'user-pending' };
+    const pendingUser = {
+      id: 'user-pending',
+      isActive: true,
+      setupCompletedAt: null,
+    };
+
+    it('từ chối khi confirmPassword không khớp — không đụng DB', async () => {
+      await expect(
+        service.acceptInvitation({ ...dto, confirmPassword: 'khac' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('happy path: đặt mật khẩu, setupCompletedAt, đánh dấu usedAt, thu hồi lời mời khác', async () => {
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 1 }); // claim thành công
+      prisma.accountInvitation.findUniqueOrThrow.mockResolvedValue(
+        invitationRow,
+      );
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.user.update.mockResolvedValue({});
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 0 }); // revoke lời mời khác
+
+      const result = await service.acceptInvitation(dto);
+
+      expect(result).toEqual({ success: true, loginRequired: true });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: pendingUser.id },
+        data: {
+          passwordHash: 'hashed-new-password',
+          setupCompletedAt: expect.any(Date) as Date,
+        },
+      });
+    });
+
+    it('token hết hạn/đã dùng/đã thu hồi -> lỗi chung, không phân biệt lý do', async () => {
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 0 }); // claim thất bại
+
+      await expect(service.acceptInvitation(dto)).rejects.toThrow(
+        'Link thiết lập tài khoản không hợp lệ hoặc đã hết hạn.',
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('tài khoản đã bị vô hiệu hóa -> lỗi chung (không lộ lý do)', async () => {
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.accountInvitation.findUniqueOrThrow.mockResolvedValue(
+        invitationRow,
+      );
+      prisma.user.findUnique.mockResolvedValue({
+        ...pendingUser,
+        isActive: false,
+      });
+
+      await expect(service.acceptInvitation(dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('tài khoản đã hoàn tất thiết lập -> lỗi chung (chặn dùng lại link cũ)', async () => {
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.accountInvitation.findUniqueOrThrow.mockResolvedValue(
+        invitationRow,
+      );
+      prisma.user.findUnique.mockResolvedValue({
+        ...pendingUser,
+        setupCompletedAt: new Date(),
+      });
+
+      await expect(service.acceptInvitation(dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('không tạo phiên đăng nhập (không gọi issueTokens/refreshToken.create)', async () => {
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.accountInvitation.findUniqueOrThrow.mockResolvedValue(
+        invitationRow,
+      );
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.user.update.mockResolvedValue({});
+      prisma.accountInvitation.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await service.acceptInvitation(dto);
+
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
   });
 });

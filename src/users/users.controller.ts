@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateAccountInvitationDto } from './dto/create-account-invitation.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -82,6 +83,35 @@ export class UsersController {
   @Post()
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
+  }
+
+  // ⚠️ Đường tạo trực tiếp bằng mật khẩu (POST /users, ở trên) vẫn giữ tạm
+  // thời trong Phase 2A — sẽ được xem xét loại bỏ sau khi luồng lời mời ổn
+  // định (xem CMS-ACCOUNT-INVITATION-GREENFIELD-AUDIT-M1 §L).
+  @ApiOperation({
+    summary: 'Tạo tài khoản qua lời mời — SUPER_ADMIN không đặt mật khẩu',
+  })
+  @Roles(Role.SUPER_ADMIN)
+  @Post('invitations')
+  createInvitation(
+    @Body() dto: CreateAccountInvitationDto,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.usersService.createInvitation(dto, actor.id);
+  }
+
+  @ApiOperation({ summary: 'Gửi lại lời mời thiết lập tài khoản' })
+  @Roles(Role.SUPER_ADMIN)
+  @Post(':id/resend-invitation')
+  resendInvitation(@Param('id') id: string, @CurrentUser() actor: Actor) {
+    return this.usersService.resendInvitation(id, actor.id);
+  }
+
+  @ApiOperation({ summary: 'Thu hồi lời mời thiết lập tài khoản' })
+  @Roles(Role.SUPER_ADMIN)
+  @Post(':id/revoke-invitation')
+  revokeInvitation(@Param('id') id: string, @CurrentUser() actor: Actor) {
+    return this.usersService.revokeInvitation(id, actor.id);
   }
 
   @Roles(Role.SUPER_ADMIN)

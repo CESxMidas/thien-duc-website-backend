@@ -37,7 +37,9 @@ enum SubmissionStatus {
   DONE
 }
 
-/** Trạng thái yêu cầu cập nhật hồ sơ cá nhân do nhân viên gửi lên. */
+/**
+ * Trạng thái yêu cầu cập nhật hồ sơ cá nhân do nhân viên gửi lên.
+ */
 enum ProfileChangeStatus {
   PENDING
   APPROVED
@@ -59,15 +61,48 @@ model User {
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until")
   isActive            Boolean   @default(true) @map("is_active")
+  // NULL = tài khoản do lời mời tạo ra và chưa hoàn tất thiết lập mật khẩu
+  // (chưa đăng nhập được). Backfill cho tài khoản đã tồn tại đặt bằng
+  // `createdAt` — xem migration `add_account_invitations`.
+  setupCompletedAt    DateTime? @map("setup_completed_at")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  refreshTokens         RefreshToken[]
-  mediaAssets           MediaAsset[]
-  profileChangeRequests ProfileChangeRequest[] @relation("ProfileChangeRequester")
+  refreshTokens          RefreshToken[]
+  mediaAssets            MediaAsset[]
+  profileChangeRequests  ProfileChangeRequest[] @relation("ProfileChangeRequester")
   reviewedProfileChanges ProfileChangeRequest[] @relation("ProfileChangeReviewer")
+  invitationsReceived    AccountInvitation[]    @relation("InvitationRecipient")
+  invitationsSent        AccountInvitation[]    @relation("InvitationSender")
 
   @@map("users")
+}
+
+/**
+ * Lời mời thiết lập tài khoản CMS — chỉ SUPER_ADMIN tạo được (xem
+ * users.controller.ts). Tách bảng riêng khỏi RefreshToken/User và khỏi
+ * PasswordResetToken tương lai: mục đích, người khởi tạo và vòng đời khác
+ * nhau, không dùng chung để tránh trộn lẫn quy tắc nghiệp vụ giữa hai luồng.
+ * Token gốc không bao giờ lưu — chỉ lưu `tokenHash` (SHA-256), theo đúng mẫu
+ * đã dùng ở RefreshToken.tokenHash.
+ */
+model AccountInvitation {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation("InvitationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  invitedById String    @map("invited_by_id")
+  invitedBy   User      @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // userId: tra cứu lời mời hiện có của một tài khoản (resend/revoke/accept).
+  // expiresAt: dọn dẹp định kỳ các lời mời đã hết hạn.
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("account_invitations")
 }
 
 /**
@@ -76,17 +111,17 @@ model User {
  * người chỉ giữ một yêu cầu PENDING tại một thời điểm (xem service).
  */
 model ProfileChangeRequest {
-  id         String              @id @default(uuid())
-  userId     String              @map("user_id")
-  user       User                @relation("ProfileChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
-  payload    Json // { name?, phone?, avatarUrl?, position?, department?, bio? }
-  status     ProfileChangeStatus @default(PENDING)
-  reviewNote String?             @map("review_note")
-  reviewedById String?           @map("reviewed_by_id")
-  reviewedBy User?               @relation("ProfileChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt DateTime?           @map("reviewed_at")
-  createdAt  DateTime            @default(now()) @map("created_at")
-  updatedAt  DateTime            @updatedAt @map("updated_at")
+  id           String              @id @default(uuid())
+  userId       String              @map("user_id")
+  user         User                @relation("ProfileChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
+  payload      Json // { name?, phone?, avatarUrl?, position?, department?, bio? }
+  status       ProfileChangeStatus @default(PENDING)
+  reviewNote   String?             @map("review_note")
+  reviewedById String?             @map("reviewed_by_id")
+  reviewedBy   User?               @relation("ProfileChangeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?           @map("reviewed_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([status])

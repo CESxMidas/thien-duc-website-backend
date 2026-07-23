@@ -43,6 +43,21 @@ describe('UsersController @Roles (R3: ADMIN read-only, SUPER_ADMIN quản lý)',
     }
   });
 
+  // CMS-ACCOUNT-INVITATION-PHASE2A: tạo/gửi lại/thu hồi lời mời cũng chỉ
+  // SUPER_ADMIN — cùng mức quyền với tạo/sửa/xóa tài khoản trực tiếp.
+  it('Lời mời tài khoản (tạo/gửi lại/thu hồi): chỉ SUPER_ADMIN', () => {
+    for (const handler of [
+      'createInvitation',
+      'resendInvitation',
+      'revokeInvitation',
+    ] as const) {
+      const roles = requiredRoles(handler);
+      expect(roles).toEqual([Role.SUPER_ADMIN]);
+      expect(roles).not.toContain(Role.ADMIN);
+      expect(roles).not.toContain(Role.EDITOR);
+    }
+  });
+
   it('EDITOR không nằm trong bất kỳ route quản lý tài khoản nào', () => {
     for (const handler of [
       'findAll',
@@ -50,6 +65,9 @@ describe('UsersController @Roles (R3: ADMIN read-only, SUPER_ADMIN quản lý)',
       'create',
       'update',
       'remove',
+      'createInvitation',
+      'resendInvitation',
+      'revokeInvitation',
     ] as const) {
       expect(requiredRoles(handler)).not.toContain(Role.EDITOR);
     }

@@ -70,3 +70,8 @@ services:
       # error tracking, app vẫn chạy. Xem docs/07-deployment/monitoring-and-alerting.md.
       - key: SENTRY_DSN
         sync: false
+      # Origin Admin SPA cho link email lời mời thiết lập tài khoản. Không bí
+      # mật nhưng nhập tay ở Dashboard (URL production thật không đưa vào repo).
+      # Bắt buộc HTTPS ở production.
+      - key: ADMIN_APP_URL
+        sync: false

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
+import { Role } from '../../generated/prisma/client';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
@@ -14,6 +15,29 @@ export interface ContactNotificationData {
   ipAddress?: string | null;
   createdAt: Date;
 }
+
+/**
+ * Dữ liệu gửi email lời mời thiết lập tài khoản. `token` là token lời mời bản
+ * rõ — CHỈ tồn tại ở đây để dựng link, KHÔNG bao giờ được log hay trả ra ngoài.
+ */
+export interface AccountInvitationData {
+  to: string;
+  name: string;
+  role: Role;
+  /** Token lời mời bản rõ — dùng dựng link, tuyệt đối không log. */
+  token: string;
+  expiresAt: Date;
+}
+
+/** Nhãn tiếng Việt cho vai trò — khớp nhãn hiển thị ở Admin (labels.ts). */
+const ROLE_LABEL: Record<Role, string> = {
+  EDITOR: 'Biên tập viên',
+  ADMIN: 'Quản trị',
+  SUPER_ADMIN: 'Super Admin',
+};
+
+/** Route trang tự thiết lập mật khẩu trên Admin SPA (public). */
+const SETUP_PATH = '/thiet-lap-tai-khoan';
 
 /** Hiển thị thời gian theo giờ VN (UTC+7) — dữ liệu lưu UTC trong DB. */
 const VN_DATETIME = new Intl.DateTimeFormat('vi-VN', {
@@ -37,10 +61,13 @@ function escapeHtml(value: string): string {
  * nhất. Chọn Resend vì runtime Render bị chặn cổng SMTP outbound / không tới
  * được IPv6 như Gmail SMTP.
  *
- * Theo cùng khuôn với `CloudinaryService`: nếu thiếu cấu hình
- * (`RESEND_API_KEY` / `MAIL_FROM` / `CONTACT_NOTIFY_TO`) thì **degrade thành
- * no-op** (chỉ log cảnh báo) thay vì làm sập app — lead vẫn được lưu bình
- * thường, chỉ là không có email báo.
+ * Theo cùng khuôn với `CloudinaryService`: thiếu cấu hình thì **degrade thành
+ * no-op** (chỉ log cảnh báo) thay vì làm sập app.
+ *
+ * Điều kiện tách theo từng loại email (xem `canSend*`): client Resend cần
+ * `RESEND_API_KEY` + `MAIL_FROM`; email thông báo liên hệ cần thêm
+ * `CONTACT_NOTIFY_TO`; email lời mời cần thêm `ADMIN_APP_URL` hợp lệ. Thiếu
+ * cấu hình riêng của một loại KHÔNG làm tắt loại kia.
  */
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -48,6 +75,8 @@ export class MailService implements OnModuleInit {
   private resend: Resend | null = null;
   private from = '';
   private notifyTo = '';
+  /** Origin Admin SPA đã chuẩn hoá (bỏ dấu `/` cuối); '' nếu thiếu/không hợp lệ. */
+  private adminAppUrl = '';
 
   constructor(private readonly config: ConfigService) {}
 
@@ -55,27 +84,87 @@ export class MailService implements OnModuleInit {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.from = this.config.get<string>('MAIL_FROM') ?? '';
     this.notifyTo = this.config.get<string>('CONTACT_NOTIFY_TO') ?? '';
+    this.adminAppUrl = this.normalizeAdminAppUrl(
+      this.config.get<string>('ADMIN_APP_URL'),
+    );
 
-    if (!apiKey || !this.from || !this.notifyTo) {
+    // Client Resend chỉ cần `apiKey` + `from` — điều kiện CHUNG của mọi loại
+    // email. Từng loại email còn có yêu cầu riêng (xem `canSend*`): thông báo
+    // liên hệ cần `CONTACT_NOTIFY_TO`, lời mời cần `ADMIN_APP_URL` hợp lệ. Không
+    // gộp hai yêu cầu riêng vào điều kiện dựng client, để một loại thiếu cấu
+    // hình không vô tình tắt loại kia.
+    if (!apiKey || !this.from) {
       this.logger.warn(
-        `Thiếu cấu hình Resend — email thông báo liên hệ bị bỏ qua cho tới khi cấu hình đủ (lead vẫn được lưu). apiKey=${
+        `Thiếu cấu hình Resend cơ bản — mọi email bị bỏ qua cho tới khi cấu hình đủ. apiKey=${
           apiKey ? 'set' : 'missing'
-        } from=${this.from ? 'set' : 'missing'} notifyTo=${
-          this.notifyTo ? 'set' : 'missing'
-        }`,
+        } from=${this.from ? 'set' : 'missing'}`,
       );
       return;
     }
 
     this.resend = new Resend(apiKey);
-    // Log quan sát (KHÔNG chứa secret/PII): chỉ cờ present/missing.
+    // Log quan sát (KHÔNG chứa secret/PII/URL): chỉ cờ ready/missing từng năng lực.
     this.logger.log(
-      'Email provider=resend đã cấu hình: apiKey=set from=set notifyTo=set',
+      `Email provider=resend đã cấu hình. contactNotification=${
+        this.canSendContactNotification ? 'ready' : 'missing CONTACT_NOTIFY_TO'
+      } accountInvitation=${
+        this.canSendAccountInvitation
+          ? 'ready'
+          : 'missing/invalid ADMIN_APP_URL'
+      }`,
     );
   }
 
+  /** Client Resend đã dựng (apiKey + from) — điều kiện chung của mọi email. */
   get isConfigured(): boolean {
     return this.resend !== null;
+  }
+
+  /** Đủ điều kiện gửi email thông báo liên hệ: Resend + CONTACT_NOTIFY_TO. */
+  get canSendContactNotification(): boolean {
+    return this.resend !== null && this.notifyTo !== '';
+  }
+
+  /** Đủ điều kiện gửi email lời mời: Resend + ADMIN_APP_URL hợp lệ. */
+  get canSendAccountInvitation(): boolean {
+    return this.resend !== null && this.adminAppUrl !== '';
+  }
+
+  /**
+   * Chuẩn hoá & kiểm tra ADMIN_APP_URL (biến không bí mật, chỉ ở backend):
+   * - bắt buộc HTTPS ở production;
+   * - cho phép http localhost khi dev/test;
+   * - URL sai định dạng / sai giao thức → trả '' (email lời mời sẽ degrade
+   *   thành no-op, giống khuôn xử lý thiếu cấu hình ở nơi khác).
+   * Bỏ dấu `/` cuối để tránh nhân đôi khi ghép path.
+   */
+  private normalizeAdminAppUrl(raw: string | undefined): string {
+    if (!raw) return '';
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      this.logger.warn(
+        'ADMIN_APP_URL không hợp lệ — bỏ qua gửi email lời mời cho tới khi sửa.',
+      );
+      return '';
+    }
+    const isProd = (process.env.NODE_ENV ?? 'production') === 'production';
+    const isLocalhost =
+      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (isProd && parsed.protocol !== 'https:') {
+      this.logger.warn(
+        'ADMIN_APP_URL phải dùng HTTPS ở production — bỏ qua gửi email lời mời.',
+      );
+      return '';
+    }
+    if (!isProd && parsed.protocol !== 'https:' && !isLocalhost) {
+      this.logger.warn(
+        'ADMIN_APP_URL http chỉ chấp nhận với localhost — bỏ qua gửi email lời mời.',
+      );
+      return '';
+    }
+    return raw.replace(/\/+$/, '');
   }
 
   /**
@@ -85,10 +174,12 @@ export class MailService implements OnModuleInit {
    */
   async sendContactNotification(data: ContactNotificationData): Promise<void> {
     const ref = data.submissionId ?? 'unknown';
-    if (!this.resend) {
-      // Resend chưa cấu hình (đã cảnh báo lúc khởi động) — bỏ qua, lead vẫn đã lưu.
+    // Vừa để cảnh báo sớm, vừa để TypeScript thu hẹp kiểu `resend` khác null.
+    const resend = this.resend;
+    if (!resend || !this.notifyTo) {
+      // Thiếu Resend hoặc CONTACT_NOTIFY_TO — bỏ qua, lead vẫn đã lưu.
       this.logger.warn(
-        `Bỏ qua gửi email thông báo liên hệ: Resend chưa cấu hình (submissionId=${ref}).`,
+        `Bỏ qua gửi email thông báo liên hệ: chưa đủ cấu hình (submissionId=${ref}).`,
       );
       return;
     }
@@ -96,7 +187,7 @@ export class MailService implements OnModuleInit {
       `Bắt đầu gửi email thông báo liên hệ qua Resend (submissionId=${ref}).`,
     );
     try {
-      const { data: sent, error } = await this.resend.emails.send({
+      const { data: sent, error } = await resend.emails.send({
         from: this.from,
         to: this.notifyTo,
         // Trả lời thẳng cho khách nếu họ để lại email.
@@ -126,6 +217,108 @@ export class MailService implements OnModuleInit {
         }`,
       );
     }
+  }
+
+  /**
+   * Gửi email lời mời thiết lập tài khoản CMS. Cùng khuôn **không bao giờ ném
+   * lỗi** như `sendContactNotification`: tài khoản + lời mời đã được lưu DB
+   * trước khi gọi hàm này, nên gửi mail hỏng chỉ là phụ (SUPER_ADMIN có thể
+   * gửi lại). KHÔNG log token, không log setup URL, không log payload email.
+   */
+  async sendAccountInvitation(data: AccountInvitationData): Promise<void> {
+    // Điều kiện lời mời ĐỘC LẬP với CONTACT_NOTIFY_TO: chỉ cần Resend +
+    // ADMIN_APP_URL. `const resend` cũng để TypeScript thu hẹp kiểu khác null.
+    const resend = this.resend;
+    if (!resend) {
+      this.logger.warn(
+        'Bỏ qua gửi email lời mời: Resend chưa cấu hình (tài khoản vẫn ở trạng thái chờ thiết lập).',
+      );
+      return;
+    }
+    if (!this.adminAppUrl) {
+      this.logger.warn(
+        'Bỏ qua gửi email lời mời: thiếu/không hợp lệ ADMIN_APP_URL.',
+      );
+      return;
+    }
+
+    // URL chứa token — chỉ dựng tại đây để nhúng vào email, KHÔNG log.
+    const setupUrl = this.buildInvitationSetupUrl(data.token);
+    this.logger.log(
+      'Bắt đầu gửi email lời mời thiết lập tài khoản qua Resend.',
+    );
+    try {
+      const { data: sent, error } = await resend.emails.send({
+        from: this.from,
+        to: data.to,
+        subject: 'Thiết lập tài khoản quản trị CMS',
+        text: this.buildInvitationText(data, setupUrl),
+        html: this.buildInvitationHtml(data, setupUrl),
+      });
+      if (error) {
+        // Chỉ log name/message của lỗi — không kèm recipient/URL/token.
+        this.logger.error(
+          `Gửi email lời mời qua Resend thất bại: ${error.name} - ${error.message}`,
+        );
+        return;
+      }
+      this.logger.log(
+        `Đã gửi email lời mời qua Resend (messageId=${sent?.id ?? 'n/a'}).`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Gửi email lời mời qua Resend thất bại: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /** Dựng link thiết lập bằng URL API để token được mã hoá đúng chuẩn query. */
+  private buildInvitationSetupUrl(token: string): string {
+    const url = new URL(SETUP_PATH, `${this.adminAppUrl}/`);
+    url.searchParams.set('token', token);
+    return url.toString();
+  }
+
+  private buildInvitationText(
+    data: AccountInvitationData,
+    setupUrl: string,
+  ): string {
+    return [
+      `Xin chào ${data.name},`,
+      '',
+      'Quản trị viên đã tạo cho bạn một tài khoản trên hệ thống quản trị (CMS) website Thiên Đức.',
+      `Vai trò được cấp: ${ROLE_LABEL[data.role]}.`,
+      '',
+      'Vui lòng thiết lập mật khẩu để bắt đầu sử dụng bằng liên kết dưới đây:',
+      setupUrl,
+      '',
+      `Liên kết này sẽ hết hạn sau 48 giờ (vào lúc ${VN_DATETIME.format(
+        data.expiresAt,
+      )} giờ VN).`,
+      'Vì lý do an toàn, vui lòng KHÔNG chuyển tiếp email hay liên kết này cho người khác.',
+      '',
+      'Nếu bạn không rõ vì sao nhận được email này, vui lòng bỏ qua hoặc liên hệ quản trị viên.',
+    ].join('\n');
+  }
+
+  private buildInvitationHtml(
+    data: AccountInvitationData,
+    setupUrl: string,
+  ): string {
+    return [
+      '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#191919">',
+      `<p>Xin chào <strong>${escapeHtml(data.name)}</strong>,</p>`,
+      '<p>Quản trị viên đã tạo cho bạn một tài khoản trên hệ thống quản trị (CMS) website Thiên Đức.</p>',
+      `<p>Vai trò được cấp: <strong>${escapeHtml(ROLE_LABEL[data.role])}</strong>.</p>`,
+      `<p style="margin:24px 0"><a href="${escapeHtml(setupUrl)}" style="display:inline-block;padding:10px 20px;background:#1a56db;color:#ffffff;text-decoration:none;border-radius:6px">Thiết lập mật khẩu</a></p>`,
+      `<p style="color:#59646a">Liên kết sẽ hết hạn sau 48 giờ (vào lúc ${VN_DATETIME.format(
+        data.expiresAt,
+      )} giờ VN). Vì lý do an toàn, vui lòng <strong>không chuyển tiếp</strong> email hay liên kết này cho người khác.</p>`,
+      '<p style="color:#59646a">Nếu bạn không rõ vì sao nhận được email này, vui lòng bỏ qua hoặc liên hệ quản trị viên.</p>',
+      '</div>',
+    ].join('');
   }
 
   private buildText(data: ContactNotificationData): string {

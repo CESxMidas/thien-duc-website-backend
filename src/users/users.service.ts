@@ -1,19 +1,41 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { ProfileChangeStatus, Role } from '../../generated/prisma/client';
 import { AuthService } from '../auth/auth.service';
+import { generateOpaqueToken } from '../common/utils/opaque-token.util';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateAccountInvitationDto } from './dto/create-account-invitation.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 const SALT_ROUNDS = 12;
+
+/** Lời mời hết hạn sau 48 giờ — đủ thời gian để người được mời kiểm tra email. */
+const INVITATION_TTL_MS = 48 * 60 * 60 * 1000;
+
+/** Chặn gửi lại lời mời liên tục cho cùng một tài khoản trong 60 giây. */
+const RESEND_COOLDOWN_MS = 60 * 1000;
+
+/** Field an toàn của một lời mời — không bao giờ gồm `tokenHash`. */
+const INVITATION_SAFE_FIELDS = {
+  id: true,
+  createdAt: true,
+  expiresAt: true,
+  usedAt: true,
+  revokedAt: true,
+} as const;
 
 /** Các field an toàn để trả ra ngoài — không bao giờ gồm `passwordHash`. */
 const PUBLIC_FIELDS = {
@@ -71,9 +93,12 @@ function isUniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly mailService: MailService,
   ) {}
 
   findAll() {
@@ -111,6 +136,178 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  /* -----------------------------------------------------------------------
+     Lời mời thiết lập tài khoản (invitation) — Phase 2A.
+     ⚠️ CHƯA có cổng chặn đăng nhập dựa trên `setupCompletedAt` (Phase 2B mới
+     thêm). Vì vậy giai đoạn này CHỈ là điểm kiểm tra triển khai (checkpoint),
+     KHÔNG được coi là tính năng lời mời hoàn chỉnh, sẵn sàng lên production
+     một mình — một tài khoản "pending" vẫn không có gì chủ động ngăn nó
+     đăng nhập ngoài việc không ai biết mật khẩu giữ chỗ của nó.
+     ----------------------------------------------------------------------- */
+
+  /**
+   * SUPER_ADMIN tạo tài khoản qua lời mời — không có, không thấy, không chọn
+   * mật khẩu vĩnh viễn của người được mời. `passwordHash` được ghi bằng hash
+   * của một chuỗi ngẫu nhiên giữ chỗ, không ai biết, không lưu ở đâu khác;
+   * `setupCompletedAt` là nguồn xác thực duy nhất cho việc tài khoản đã
+   * thiết lập xong hay chưa (không suy luận từ `passwordHash`).
+   */
+  async createInvitation(dto: CreateAccountInvitationDto, actorId: string) {
+    // Giữ chỗ — không bao giờ trả ra ngoài hàm này, không log, không tái sử dụng.
+    const placeholder = crypto.randomBytes(32).toString('base64url');
+    const passwordHash = await bcrypt.hash(placeholder, SALT_ROUNDS);
+    // `token` bản rõ chỉ sống trong bộ nhớ của hàm này đủ lâu để gửi email sau
+    // khi transaction commit; DB chỉ lưu `tokenHash`. Không log, không trả HTTP.
+    const { token, tokenHash } = generateOpaqueToken();
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+    let created: {
+      user: {
+        id: string;
+        email: string;
+        name: string;
+        role: Role;
+        isActive: boolean;
+        createdAt: Date;
+      };
+      invitation: {
+        id: string;
+        createdAt: Date;
+        expiresAt: Date;
+        usedAt: Date | null;
+        revokedAt: Date | null;
+      };
+    };
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: dto.email,
+            name: dto.name,
+            role: dto.role,
+            passwordHash,
+            isActive: true,
+            setupCompletedAt: null,
+          },
+          select: PUBLIC_FIELDS,
+        });
+        const invitation = await tx.accountInvitation.create({
+          data: { userId: user.id, tokenHash, expiresAt, invitedById: actorId },
+          select: INVITATION_SAFE_FIELDS,
+        });
+        return { user, invitation };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('Email này đã được sử dụng');
+      }
+      throw error;
+    }
+
+    // Log an toàn (không token/hash/mật khẩu) — ghi TRƯỚC khi gửi mail để có
+    // dấu vết kể cả khi mail lỗi.
+    this.logger.log(
+      `account_invitation_created invitedBy=${actorId} userId=${created.user.id} invitationId=${created.invitation.id}`,
+    );
+
+    // Gửi email SAU commit: MailService không bao giờ ném lỗi (degrade an
+    // toàn), nên mail hỏng không làm rollback tài khoản/lời mời — SUPER_ADMIN
+    // có thể gửi lại. Token bản rõ chỉ đi vào đúng lời gọi này rồi ra khỏi scope.
+    await this.mailService.sendAccountInvitation({
+      to: created.user.email,
+      name: created.user.name,
+      role: created.user.role,
+      token,
+      expiresAt: created.invitation.expiresAt,
+    });
+
+    return created;
+  }
+
+  /** Gửi lại lời mời — thu hồi lời mời cũ còn hiệu lực và tạo lời mời mới. */
+  async resendInvitation(id: string, actorId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    if (user.setupCompletedAt !== null) {
+      throw new BadRequestException('Tài khoản đã hoàn tất thiết lập');
+    }
+    if (!user.isActive) {
+      throw new BadRequestException('Tài khoản đã bị vô hiệu hóa');
+    }
+
+    const lastInvitation = await this.prisma.accountInvitation.findFirst({
+      where: { userId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (
+      lastInvitation &&
+      Date.now() - lastInvitation.createdAt.getTime() < RESEND_COOLDOWN_MS
+    ) {
+      throw new HttpException(
+        'Vui lòng đợi ít phút trước khi gửi lại lời mời',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Token bản rõ mới, khác hoàn toàn token của lời mời cũ (đã bị thu hồi).
+    const { token, tokenHash } = generateOpaqueToken();
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+    const invitation = await this.prisma.$transaction(async (tx) => {
+      // Lời mời cũ còn hiệu lực (nếu có) không còn dùng được nữa.
+      await tx.accountInvitation.updateMany({
+        where: { userId: id, usedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      return tx.accountInvitation.create({
+        data: { userId: id, tokenHash, expiresAt, invitedById: actorId },
+        select: INVITATION_SAFE_FIELDS,
+      });
+    });
+
+    this.logger.log(
+      `account_invitation_resent invitedBy=${actorId} userId=${id} invitationId=${invitation.id}`,
+    );
+
+    // Gửi sau commit; lời mời cũ vẫn bị thu hồi kể cả khi mail lỗi.
+    await this.mailService.sendAccountInvitation({
+      to: user.email,
+      name: user.name,
+      role: user.role,
+      token,
+      expiresAt: invitation.expiresAt,
+    });
+
+    return invitation;
+  }
+
+  /**
+   * Thu hồi lời mời đang hiệu lực của một tài khoản. Không đụng tới
+   * `isActive`, `role`, `passwordHash`, `setupCompletedAt`.
+   */
+  async revokeInvitation(id: string, actorId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    if (user.setupCompletedAt !== null) {
+      throw new BadRequestException(
+        'Tài khoản đã hoàn tất thiết lập, không còn lời mời để thu hồi',
+      );
+    }
+
+    // Idempotent: gọi lần hai khi không còn lời mời nào đang hiệu lực chỉ
+    // đơn giản không thu hồi gì thêm — không phải lỗi.
+    const revoked = await this.prisma.accountInvitation.updateMany({
+      where: { userId: id, usedAt: null, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    this.logger.log(
+      `account_invitation_revoked actorId=${actorId} userId=${id} count=${revoked.count}`,
+    );
+
+    return { revoked: revoked.count > 0 };
   }
 
   /**

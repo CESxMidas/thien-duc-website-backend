@@ -4,8 +4,10 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
+import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ValidateInvitationDto } from './dto/validate-invitation.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -37,5 +39,19 @@ export class AuthController {
   async logout(@Body() dto: RefreshTokenDto) {
     await this.authService.logout(dto.refreshToken);
     return { loggedOut: true };
+  }
+
+  // Chỉ để UX kiểm tra trước — accept-invitation luôn tự xác thực lại toàn
+  // bộ điều kiện độc lập, không tin vào kết quả của endpoint này.
+  @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Post('validate-invitation')
+  validateInvitation(@Body() dto: ValidateInvitationDto) {
+    return this.authService.validateInvitationToken(dto.token);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Post('accept-invitation')
+  acceptInvitation(@Body() dto: AcceptInvitationDto) {
+    return this.authService.acceptInvitation(dto);
   }
 }

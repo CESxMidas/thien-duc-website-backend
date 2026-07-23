@@ -1,16 +1,23 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth/auth.service';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 
 jest.mock('bcrypt');
 (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+
+/** Tham số đầu tiên của lần gọi mock đầu tiên, có kiểu rõ ràng. */
+function firstCallArg<T>(mock: jest.Mock): T {
+  return (mock.mock.calls as unknown as T[][])[0][0];
+}
 
 /** Lỗi Prisma khi email trùng (ràng buộc unique). */
 const uniqueViolation = Object.assign(new Error('Unique constraint'), {
@@ -44,8 +51,15 @@ describe('UsersService', () => {
       update: jest.Mock;
       count: jest.Mock;
     };
+    accountInvitation: {
+      create: jest.Mock;
+      findFirst: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let authService: { revokeAllTokens: jest.Mock };
+  let mailService: { sendAccountInvitation: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -56,14 +70,26 @@ describe('UsersService', () => {
         update: jest.fn(),
         count: jest.fn(),
       },
+      accountInvitation: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      // Mô phỏng transaction tương tác: gọi thẳng callback với chính `prisma`
+      // giả này làm `tx` — mọi lệnh bên trong transaction đi qua cùng mock.
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
     };
     authService = { revokeAllTokens: jest.fn() };
+    mailService = {
+      sendAccountInvitation: jest.fn().mockResolvedValue(undefined),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuthService, useValue: authService },
+        { provide: MailService, useValue: mailService },
       ],
     }).compile();
 
@@ -122,6 +148,345 @@ describe('UsersService', () => {
           role: 'EDITOR',
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('createInvitation', () => {
+    const dto = {
+      email: 'moi@thienduc.vn',
+      name: 'Người mới',
+      role: 'EDITOR' as const,
+    };
+    const createdUser = {
+      id: 'new-1',
+      email: dto.email,
+      name: dto.name,
+      role: dto.role,
+      isActive: true,
+      createdAt: new Date(),
+    };
+    const createdInvitation = {
+      id: 'inv-1',
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      usedAt: null,
+      revokedAt: null,
+    };
+
+    it('tạo User + AccountInvitation trong một transaction, không có mật khẩu client', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+
+      const result = await service.createInvitation(dto, 'sa-1');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            email: dto.email,
+            name: dto.name,
+            role: dto.role,
+            isActive: true,
+            setupCompletedAt: null,
+            passwordHash: 'hashed',
+          }),
+        }),
+      );
+      // DTO không có field password — không có gì để rò vào data ngoài passwordHash placeholder.
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ password: expect.anything() }),
+        }),
+      );
+      expect(result.user).toEqual(createdUser);
+      expect(result.invitation).toEqual(createdInvitation);
+    });
+
+    it('setupCompletedAt = null và isActive = true khi tạo', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+
+      await service.createInvitation(dto, 'sa-1');
+
+      const call = firstCallArg<{
+        data: { setupCompletedAt: unknown; isActive: unknown };
+      }>(prisma.user.create);
+      expect(call.data.setupCompletedAt).toBeNull();
+      expect(call.data.isActive).toBe(true);
+    });
+
+    it('invitedById là id của SUPER_ADMIN đang thao tác, hạn 48 giờ', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+
+      await service.createInvitation(dto, 'sa-1');
+
+      const call = firstCallArg<{
+        data: {
+          invitedById: string;
+          userId: string;
+          expiresAt: Date;
+          tokenHash: string;
+        };
+      }>(prisma.accountInvitation.create);
+      expect(call.data.invitedById).toBe('sa-1');
+      expect(call.data.userId).toBe(createdUser.id);
+      const hoursUntilExpiry =
+        (call.data.expiresAt.getTime() - Date.now()) / (60 * 60 * 1000);
+      expect(hoursUntilExpiry).toBeGreaterThan(47);
+      expect(hoursUntilExpiry).toBeLessThanOrEqual(48);
+      // Chỉ hash được lưu — không phải token bản rõ.
+      expect(call.data.tokenHash).toHaveLength(64); // sha256 hex
+    });
+
+    it('trả 409 khi email đã tồn tại (không phải 500)', async () => {
+      prisma.$transaction.mockRejectedValue(uniqueViolation);
+
+      await expect(service.createInvitation(dto, 'sa-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('không trả passwordHash, tokenHash, hay token thô ra ngoài', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+
+      const result = await service.createInvitation(dto, 'sa-1');
+      const serialized = JSON.stringify(result);
+
+      expect(result.user).not.toHaveProperty('passwordHash');
+      expect(result.invitation).not.toHaveProperty('tokenHash');
+      expect(serialized).not.toMatch(/tokenHash/);
+      expect(serialized).not.toMatch(/passwordHash/);
+      // Không có field `token` nào trong response.
+      expect(serialized).not.toMatch(/"token"/);
+    });
+
+    it('gửi email lời mời SAU commit, với token bản rõ chỉ đi vào MailService', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+
+      await service.createInvitation(dto, 'sa-1');
+
+      expect(mailService.sendAccountInvitation).toHaveBeenCalledTimes(1);
+      const arg = firstCallArg<{
+        to: string;
+        name: string;
+        role: string;
+        token: string;
+        expiresAt: Date;
+      }>(mailService.sendAccountInvitation);
+      expect(arg.to).toBe(createdUser.email);
+      expect(arg.name).toBe(createdUser.name);
+      expect(arg.role).toBe(createdUser.role);
+      expect(arg.expiresAt).toBe(createdInvitation.expiresAt);
+      // Token bản rõ khác hoàn toàn tokenHash đã lưu DB.
+      const stored = firstCallArg<{ data: { tokenHash: string } }>(
+        prisma.accountInvitation.create,
+      );
+      expect(arg.token).toBeTruthy();
+      expect(arg.token).not.toBe(stored.data.tokenHash);
+    });
+
+    it('mail lỗi không làm hỏng việc tạo tài khoản/lời mời (đã commit)', async () => {
+      prisma.user.create.mockResolvedValue(createdUser);
+      prisma.accountInvitation.create.mockResolvedValue(createdInvitation);
+      // MailService không bao giờ ném (degrade an toàn) — mô phỏng đúng hợp đồng đó.
+      mailService.sendAccountInvitation.mockResolvedValue(undefined);
+
+      const result = await service.createInvitation(dto, 'sa-1');
+      expect(result.user).toEqual(createdUser);
+      expect(result.invitation).toEqual(createdInvitation);
+    });
+  });
+
+  describe('resendInvitation', () => {
+    const pendingUser = {
+      id: 'pending-1',
+      email: 'cho@thienduc.vn',
+      isActive: true,
+      setupCompletedAt: null,
+    };
+
+    it('chỉ SUPER_ADMIN gọi được (kiểm ở controller @Roles — service không cần biết role)', async () => {
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.accountInvitation.findFirst.mockResolvedValue(null);
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 0 });
+      prisma.accountInvitation.create.mockResolvedValue({ id: 'inv-2' });
+
+      await expect(
+        service.resendInvitation(pendingUser.id, 'sa-1'),
+      ).resolves.toBeDefined();
+    });
+
+    it('từ chối khi tài khoản không tồn tại', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resendInvitation('khong-co', 'sa-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('từ chối khi tài khoản đã hoàn tất thiết lập', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...pendingUser,
+        setupCompletedAt: new Date(),
+      });
+
+      await expect(
+        service.resendInvitation(pendingUser.id, 'sa-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('từ chối khi tài khoản đã bị vô hiệu hóa', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...pendingUser,
+        isActive: false,
+      });
+
+      await expect(
+        service.resendInvitation(pendingUser.id, 'sa-1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('chặn gửi lại trong vòng 60 giây (cooldown)', async () => {
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        id: 'inv-old',
+        createdAt: new Date(Date.now() - 5000), // 5 giây trước
+      });
+
+      await expect(
+        service.resendInvitation(pendingUser.id, 'sa-1'),
+      ).rejects.toThrow(HttpException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('cho gửi lại sau khi hết cooldown; thu hồi lời mời cũ, tạo lời mời mới', async () => {
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.accountInvitation.findFirst.mockResolvedValue({
+        id: 'inv-old',
+        createdAt: new Date(Date.now() - 120_000), // 2 phút trước
+      });
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 1 });
+      const newInvitation = { id: 'inv-new', expiresAt: new Date() };
+      prisma.accountInvitation.create.mockResolvedValue(newInvitation);
+
+      const result = await service.resendInvitation(pendingUser.id, 'sa-1');
+
+      expect(prisma.accountInvitation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: pendingUser.id,
+            usedAt: null,
+            revokedAt: null,
+          }) as unknown,
+        }),
+      );
+      expect(result).toEqual(newInvitation);
+    });
+
+    it('gửi email lời mời mới tới đúng người nhận, token mới chỉ vào MailService', async () => {
+      const userWithProfile = {
+        ...pendingUser,
+        name: 'Người chờ',
+        role: 'EDITOR',
+      };
+      prisma.user.findUnique.mockResolvedValue(userWithProfile);
+      prisma.accountInvitation.findFirst.mockResolvedValue(null);
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 1 });
+      const newInvitation = {
+        id: 'inv-new',
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      };
+      prisma.accountInvitation.create.mockResolvedValue(newInvitation);
+
+      await service.resendInvitation(pendingUser.id, 'sa-1');
+
+      expect(mailService.sendAccountInvitation).toHaveBeenCalledTimes(1);
+      const arg = firstCallArg<{ to: string; token: string; expiresAt: Date }>(
+        mailService.sendAccountInvitation,
+      );
+      expect(arg.to).toBe(userWithProfile.email);
+      const stored = firstCallArg<{ data: { tokenHash: string } }>(
+        prisma.accountInvitation.create,
+      );
+      expect(arg.token).toBeTruthy();
+      expect(arg.token).not.toBe(stored.data.tokenHash);
+    });
+
+    it('mail lỗi không hoàn tác việc thu hồi lời mời cũ / tạo lời mời mới', async () => {
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.accountInvitation.findFirst.mockResolvedValue(null);
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 1 });
+      const newInvitation = { id: 'inv-new', expiresAt: new Date() };
+      prisma.accountInvitation.create.mockResolvedValue(newInvitation);
+      mailService.sendAccountInvitation.mockResolvedValue(undefined);
+
+      const result = await service.resendInvitation(pendingUser.id, 'sa-1');
+      expect(result).toEqual(newInvitation);
+      // Thu hồi lời mời cũ vẫn xảy ra bên trong transaction, độc lập với mail.
+      expect(prisma.accountInvitation.updateMany).toHaveBeenCalled();
+    });
+
+    it('không trả token thô hay tokenHash', async () => {
+      prisma.user.findUnique.mockResolvedValue(pendingUser);
+      prisma.accountInvitation.findFirst.mockResolvedValue(null);
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 0 });
+      const newInvitation = { id: 'inv-new', expiresAt: new Date() };
+      prisma.accountInvitation.create.mockResolvedValue(newInvitation);
+
+      const result = await service.resendInvitation(pendingUser.id, 'sa-1');
+      expect(JSON.stringify(result)).not.toMatch(/tokenHash/);
+    });
+  });
+
+  describe('revokeInvitation', () => {
+    it('từ chối khi tài khoản không tồn tại', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.revokeInvitation('khong-co', 'sa-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('trả 400 khi tài khoản đã hoàn tất thiết lập', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        setupCompletedAt: new Date(),
+      });
+
+      await expect(service.revokeInvitation('u-1', 'sa-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.accountInvitation.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('thu hồi mọi lời mời đang hiệu lực, không đụng field User khác', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        setupCompletedAt: null,
+      });
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.revokeInvitation('u-1', 'sa-1');
+
+      expect(prisma.accountInvitation.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u-1', usedAt: null, revokedAt: null },
+        data: { revokedAt: expect.any(Date) as Date },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(result).toEqual({ revoked: true });
+    });
+
+    it('gọi lần hai khi không còn gì để thu hồi — no-op an toàn (idempotent)', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        setupCompletedAt: null,
+      });
+      prisma.accountInvitation.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.revokeInvitation('u-1', 'sa-1');
+      expect(result).toEqual({ revoked: false });
     });
   });
 

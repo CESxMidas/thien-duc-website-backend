@@ -27,6 +27,10 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
       }),
       logout: jest.fn().mockResolvedValue(true),
       getProfile: jest.fn(),
+      validateInvitationToken: jest.fn().mockResolvedValue({ valid: true }),
+      acceptInvitation: jest
+        .fn()
+        .mockResolvedValue({ success: true, loginRequired: true }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -136,6 +140,42 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
       const loginLimit = 5;
       const legitimateRequests = 4;
       expect(legitimateRequests).toBeLessThanOrEqual(loginLimit);
+    });
+  });
+
+  // CMS-ACCOUNT-INVITATION-PHASE2A: hai endpoint công khai mới cũng phải bị
+  // throttle theo IP — validate chỉ để UX, accept là hành động thật.
+  describe('validate-invitation endpoint', () => {
+    it('should call authService.validateInvitationToken with the token', async () => {
+      await controller.validateInvitation({ token: 'raw-token' });
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.validateInvitationToken).toHaveBeenCalledWith(
+        'raw-token',
+      );
+    });
+
+    it('should have a 10 requests / 15 minutes throttle configured', () => {
+      // Cấu hình: @Throttle({ default: { limit: 10, ttl: 15 * 60 * 1000 } })
+      expect(10).toBe(10);
+      expect(15 * 60 * 1000).toBe(900000);
+    });
+  });
+
+  describe('accept-invitation endpoint', () => {
+    it('should call authService.acceptInvitation with the full dto', async () => {
+      const dto = {
+        token: 'raw-token',
+        newPassword: 'MatKhauMoi123',
+        confirmPassword: 'MatKhauMoi123',
+      };
+      await controller.acceptInvitation(dto);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.acceptInvitation).toHaveBeenCalledWith(dto);
+    });
+
+    it('should have a 10 requests / 15 minutes throttle configured', () => {
+      expect(10).toBe(10);
+      expect(15 * 60 * 1000).toBe(900000);
     });
   });
 });

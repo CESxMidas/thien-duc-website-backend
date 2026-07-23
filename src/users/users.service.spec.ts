@@ -561,28 +561,26 @@ describe('UsersService', () => {
       expect(authService.revokeAllTokens).toHaveBeenCalledWith(editor.id);
     });
 
-    it('thu hồi phiên khi đặt lại mật khẩu, và băm mật khẩu mới', async () => {
+    it('KHÔNG đặt mật khẩu kể cả khi `password` lọt vào dto', async () => {
       prisma.user.findUnique.mockResolvedValue(editor);
       prisma.user.update.mockResolvedValue(editor);
 
+      // ValidationPipe (`forbidNonWhitelisted`) đã chặn 400 ở tầng HTTP; đây là
+      // hàng rào thứ hai ở tầng service — SUPER_ADMIN không đặt được mật khẩu
+      // của tài khoản khác qua PATCH /users/:id.
       await service.update(
         editor.id,
-        { password: 'MatKhauMoi1' },
+        { name: 'Tên mới', password: 'MatKhauMoi1' } as never,
         superAdmin.id,
       );
 
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ passwordHash: 'hashed' }),
+          data: { name: 'Tên mới' },
         }),
       );
-      // Không ghi thẳng mật khẩu thô.
-      expect(prisma.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.not.objectContaining({ password: expect.anything() }),
-        }),
-      );
-      expect(authService.revokeAllTokens).toHaveBeenCalledWith(editor.id);
+      // Chỉ đổi tên thì không có lý do thu hồi phiên.
+      expect(authService.revokeAllTokens).not.toHaveBeenCalled();
     });
 
     it('thu hồi phiên khi khóa tài khoản', async () => {

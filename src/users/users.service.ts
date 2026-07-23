@@ -340,10 +340,21 @@ export class UsersService {
       await this.assertNotLastSuperAdmin(id);
     }
 
-    const { password, ...rest } = dto;
-    const data = password
-      ? { ...rest, passwordHash: await bcrypt.hash(password, SALT_ROUNDS) }
-      : rest;
+    // Không có nhánh đổi mật khẩu ở đây: `UpdateUserDto` không khai báo
+    // `password`, và ValidationPipe (`forbidNonWhitelisted`) chặn 400 nếu client
+    // vẫn gửi. Mật khẩu chỉ do chính chủ đặt (lời mời / quên mật khẩu).
+    // Chỉ lấy đúng field được phép — hàng rào thứ hai, không phụ thuộc vào việc
+    // ValidationPipe có chạy hay không (ví dụ khi gọi service trực tiếp).
+    const data: {
+      name?: string;
+      email?: string;
+      role?: Role;
+      isActive?: boolean;
+    } = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.role !== undefined) data.role = dto.role;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
     let updated: Awaited<ReturnType<UsersService['findOne']>>;
     try {
@@ -359,10 +370,10 @@ export class UsersService {
       throw error;
     }
 
-    // Đổi vai trò, đổi mật khẩu hoặc khóa tài khoản đều phải kết thúc phiên cũ:
-    // access token cũ vẫn mang `role` cũ cho tới khi hết hạn.
+    // Đổi vai trò hoặc khóa tài khoản đều phải kết thúc phiên cũ: access token
+    // cũ vẫn mang `role` cũ cho tới khi hết hạn.
     const roleChanged = dto.role !== undefined && dto.role !== target.role;
-    if (roleChanged || password || dto.isActive === false) {
+    if (roleChanged || dto.isActive === false) {
       await this.authService.revokeAllTokens(id);
     }
     return updated;

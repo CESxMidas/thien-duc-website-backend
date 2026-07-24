@@ -539,4 +539,158 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
       expectNoTokenOrUrlLeaked();
     });
   });
+
+  // CMS-AUTH-FORGOT-PASSWORD-PHASE1-BACKEND-M1: email đặt lại mật khẩu.
+  describe('sendPasswordResetEmail', () => {
+    const RESET_ENV = {
+      ...RESEND_ENV,
+      ADMIN_APP_URL: 'https://admin.thienduc.vn',
+    };
+    const RAW_TOKEN = 'raw-reset-token-xyz789';
+    const reset = {
+      to: 'nguoidung@thienduc.vn',
+      name: 'Trần <i>Thị</i> C',
+      token: RAW_TOKEN,
+      expiresAt: new Date('2026-07-24T03:20:00.000Z'),
+    };
+
+    /** Token/URL tuyệt đối không được rò ra bất kỳ log nào. */
+    function expectNoTokenOrUrlLeaked(): void {
+      const text = allLogText();
+      expect(text).not.toContain(RAW_TOKEN);
+      expect(text).not.toContain('token=');
+      expect(text).not.toContain('/dat-lai-mat-khau');
+    }
+
+    it('gửi đúng người nhận, subject đúng, URL dựng từ ADMIN_APP_URL', async () => {
+      mockResendSend.mockResolvedValue({
+        data: { id: 'reset-msg-1' },
+        error: null,
+      });
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await service.sendPasswordResetEmail(reset);
+
+      expect(mockResendSend).toHaveBeenCalledTimes(1);
+      const payload = (mockResendSend.mock.calls as unknown[][])[0][0] as {
+        from: string;
+        to: string;
+        subject: string;
+        text: string;
+        html: string;
+      };
+      expect(payload.to).toBe(reset.to);
+      expect(payload.from).toBe(RESET_ENV.MAIL_FROM);
+      expect(payload.subject).toBe('Đặt lại mật khẩu CMS');
+      // URL đặt lại dựng từ ADMIN_APP_URL, chứa token, nằm TRONG email.
+      const expectedUrl = `https://admin.thienduc.vn/dat-lai-mat-khau?token=${RAW_TOKEN}`;
+      expect(payload.text).toContain(expectedUrl);
+      expect(payload.html).toContain(`token=${RAW_TOKEN}`);
+      // Nhắc hết hạn 20 phút, dùng một lần, và bỏ qua nếu không yêu cầu.
+      expect(payload.text).toContain('20 phút');
+      expect(payload.text).toContain('MỘT LẦN');
+      expect(payload.text).toContain('KHÔNG yêu cầu');
+    });
+
+    it('token chỉ xuất hiện trong payload email, KHÔNG lộ ra log', async () => {
+      mockResendSend.mockResolvedValue({
+        data: { id: 'reset-msg-1' },
+        error: null,
+      });
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await service.sendPasswordResetEmail(reset);
+
+      const payload = (mockResendSend.mock.calls as unknown[][])[0][0] as {
+        text: string;
+      };
+      expect(payload.text).toContain(RAW_TOKEN);
+      expectNoTokenOrUrlLeaked();
+    });
+
+    it('escape tên người dùng trong HTML (chống chèn HTML)', async () => {
+      mockResendSend.mockResolvedValue({
+        data: { id: 'reset-msg-1' },
+        error: null,
+      });
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await service.sendPasswordResetEmail(reset);
+
+      const payload = (mockResendSend.mock.calls as unknown[][])[0][0] as {
+        html: string;
+      };
+      expect(payload.html).toContain('Trần &lt;i&gt;Thị&lt;/i&gt; C');
+      expect(payload.html).not.toContain('Trần <i>Thị</i> C');
+    });
+
+    it('thiếu ADMIN_APP_URL → no-op an toàn, không gửi', async () => {
+      const service = makeService({ ...RESEND_ENV, ADMIN_APP_URL: undefined });
+      service.onModuleInit();
+
+      await expect(
+        service.sendPasswordResetEmail(reset),
+      ).resolves.toBeUndefined();
+      expect(mockResendSend).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalled();
+      expectNoTokenOrUrlLeaked();
+    });
+
+    it('thiếu Resend config → no-op an toàn, không gửi', async () => {
+      const service = makeService({ ...RESET_ENV, RESEND_API_KEY: undefined });
+      service.onModuleInit();
+
+      await expect(
+        service.sendPasswordResetEmail(reset),
+      ).resolves.toBeUndefined();
+      expect(mockResendSend).not.toHaveBeenCalled();
+    });
+
+    it('Resend trả error trong body → nuốt lỗi, không log token/URL', async () => {
+      mockResendSend.mockResolvedValue({
+        data: null,
+        error: { name: 'validation_error', message: 'Domain not verified' },
+      });
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await expect(
+        service.sendPasswordResetEmail(reset),
+      ).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalled();
+      expectNoTokenOrUrlLeaked();
+    });
+
+    it('Resend ném exception → nuốt lỗi, không throw, không log token/URL', async () => {
+      mockResendSend.mockRejectedValue(new Error('network down'));
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await expect(
+        service.sendPasswordResetEmail(reset),
+      ).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalled();
+      expectNoTokenOrUrlLeaked();
+    });
+
+    it('thành công → chỉ log messageId an toàn, không token/URL', async () => {
+      mockResendSend.mockResolvedValue({
+        data: { id: 'reset-msg-1' },
+        error: null,
+      });
+      const service = makeService(RESET_ENV);
+      service.onModuleInit();
+
+      await service.sendPasswordResetEmail(reset);
+
+      const success = loggedStrings(logSpy).find((s) =>
+        s.includes('messageId=reset-msg-1'),
+      );
+      expect(success).toBeDefined();
+      expectNoTokenOrUrlLeaked();
+    });
+  });
 });

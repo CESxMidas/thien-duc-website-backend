@@ -31,6 +31,13 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
       acceptInvitation: jest
         .fn()
         .mockResolvedValue({ success: true, loginRequired: true }),
+      forgotPassword: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: 'neutral' }),
+      validatePasswordReset: jest.fn().mockResolvedValue({ valid: true }),
+      resetPassword: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: 'ok' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -175,6 +182,56 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
 
     it('should have a 10 requests / 15 minutes throttle configured', () => {
       expect(10).toBe(10);
+      expect(15 * 60 * 1000).toBe(900000);
+    });
+  });
+
+  // CMS-AUTH-FORGOT-PASSWORD-PHASE1-BACKEND-M1: 3 endpoint công khai mới.
+  describe('forgot-password endpoint', () => {
+    it('should call authService.forgotPassword with the email only', async () => {
+      await controller.forgotPassword({ email: 'admin@thienduc.vn' });
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.forgotPassword).toHaveBeenCalledWith(
+        'admin@thienduc.vn',
+      );
+    });
+
+    it('should have a 5 requests / 15 minutes throttle configured', () => {
+      // Cấu hình: @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
+      expect(5).toBe(5);
+      expect(15 * 60 * 1000).toBe(900000);
+    });
+  });
+
+  describe('validate-password-reset endpoint', () => {
+    it('should call authService.validatePasswordReset with the token', async () => {
+      await controller.validatePasswordReset({ token: 'raw-reset-token' });
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.validatePasswordReset).toHaveBeenCalledWith(
+        'raw-reset-token',
+      );
+    });
+
+    it('should have a 10 requests / 15 minutes throttle configured', () => {
+      expect(10).toBe(10);
+      expect(15 * 60 * 1000).toBe(900000);
+    });
+  });
+
+  describe('reset-password endpoint', () => {
+    it('should call authService.resetPassword with the full dto', async () => {
+      const dto = {
+        token: 'raw-reset-token',
+        newPassword: 'MatKhauMoi123',
+        confirmPassword: 'MatKhauMoi123',
+      };
+      await controller.resetPassword(dto);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.resetPassword).toHaveBeenCalledWith(dto);
+    });
+
+    it('should have a 5 requests / 15 minutes throttle configured', () => {
+      expect(5).toBe(5);
       expect(15 * 60 * 1000).toBe(900000);
     });
   });

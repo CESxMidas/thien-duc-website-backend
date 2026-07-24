@@ -29,6 +29,18 @@ export interface AccountInvitationData {
   expiresAt: Date;
 }
 
+/**
+ * Dữ liệu gửi email đặt lại mật khẩu. `token` là token bản rõ — CHỈ tồn tại ở
+ * đây để dựng link, KHÔNG bao giờ được log hay trả ra ngoài.
+ */
+export interface PasswordResetData {
+  to: string;
+  name: string;
+  /** Token đặt lại bản rõ — dùng dựng link, tuyệt đối không log. */
+  token: string;
+  expiresAt: Date;
+}
+
 /** Nhãn tiếng Việt cho vai trò — khớp nhãn hiển thị ở Admin (labels.ts). */
 const ROLE_LABEL: Record<Role, string> = {
   EDITOR: 'Biên tập viên',
@@ -38,6 +50,9 @@ const ROLE_LABEL: Record<Role, string> = {
 
 /** Route trang tự thiết lập mật khẩu trên Admin SPA (public). */
 const SETUP_PATH = '/thiet-lap-tai-khoan';
+
+/** Route trang đặt lại mật khẩu (quên mật khẩu) trên Admin SPA (public). */
+const RESET_PATH = '/dat-lai-mat-khau';
 
 /** Hiển thị thời gian theo giờ VN (UTC+7) — dữ liệu lưu UTC trong DB. */
 const VN_DATETIME = new Intl.DateTimeFormat('vi-VN', {
@@ -127,6 +142,11 @@ export class MailService implements OnModuleInit {
 
   /** Đủ điều kiện gửi email lời mời: Resend + ADMIN_APP_URL hợp lệ. */
   get canSendAccountInvitation(): boolean {
+    return this.resend !== null && this.adminAppUrl !== '';
+  }
+
+  /** Đủ điều kiện gửi email đặt lại mật khẩu: Resend + ADMIN_APP_URL hợp lệ. */
+  get canSendPasswordReset(): boolean {
     return this.resend !== null && this.adminAppUrl !== '';
   }
 
@@ -274,11 +294,108 @@ export class MailService implements OnModuleInit {
     }
   }
 
+  /**
+   * Gửi email đặt lại mật khẩu CMS. Cùng khuôn **không bao giờ ném lỗi** như
+   * `sendAccountInvitation`: token đặt lại đã được lưu DB trước khi gọi hàm này,
+   * nên gửi mail hỏng chỉ là phụ và không được làm lộ lỗi nhà cung cấp ra ngoài
+   * (response quên mật khẩu phải trung tính). KHÔNG log token, không log reset
+   * URL, không log payload email.
+   */
+  async sendPasswordResetEmail(data: PasswordResetData): Promise<void> {
+    const resend = this.resend;
+    if (!resend) {
+      this.logger.warn(
+        'Bỏ qua gửi email đặt lại mật khẩu: Resend chưa cấu hình.',
+      );
+      return;
+    }
+    if (!this.adminAppUrl) {
+      this.logger.warn(
+        'Bỏ qua gửi email đặt lại mật khẩu: thiếu/không hợp lệ ADMIN_APP_URL.',
+      );
+      return;
+    }
+
+    // URL chứa token — chỉ dựng tại đây để nhúng vào email, KHÔNG log.
+    const resetUrl = this.buildPasswordResetUrl(data.token);
+    this.logger.log('Bắt đầu gửi email đặt lại mật khẩu qua Resend.');
+    try {
+      const { data: sent, error } = await resend.emails.send({
+        from: this.from,
+        to: data.to,
+        subject: 'Đặt lại mật khẩu CMS',
+        text: this.buildPasswordResetText(data, resetUrl),
+        html: this.buildPasswordResetHtml(data, resetUrl),
+      });
+      if (error) {
+        // Chỉ log name/message của lỗi — không kèm recipient/URL/token.
+        this.logger.error(
+          `Gửi email đặt lại mật khẩu qua Resend thất bại: ${error.name} - ${error.message}`,
+        );
+        return;
+      }
+      this.logger.log(
+        `Đã gửi email đặt lại mật khẩu qua Resend (messageId=${sent?.id ?? 'n/a'}).`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Gửi email đặt lại mật khẩu qua Resend thất bại: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   /** Dựng link thiết lập bằng URL API để token được mã hoá đúng chuẩn query. */
   private buildInvitationSetupUrl(token: string): string {
     const url = new URL(SETUP_PATH, `${this.adminAppUrl}/`);
     url.searchParams.set('token', token);
     return url.toString();
+  }
+
+  /** Dựng link đặt lại mật khẩu; token mã hoá đúng chuẩn query. */
+  private buildPasswordResetUrl(token: string): string {
+    const url = new URL(RESET_PATH, `${this.adminAppUrl}/`);
+    url.searchParams.set('token', token);
+    return url.toString();
+  }
+
+  private buildPasswordResetText(
+    data: PasswordResetData,
+    resetUrl: string,
+  ): string {
+    return [
+      `Xin chào ${data.name},`,
+      '',
+      'Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn trên hệ thống quản trị (CMS) website Thiên Đức.',
+      '',
+      'Vui lòng đặt lại mật khẩu bằng liên kết dưới đây:',
+      resetUrl,
+      '',
+      `Liên kết này chỉ dùng được MỘT LẦN và sẽ hết hạn sau 20 phút (vào lúc ${VN_DATETIME.format(
+        data.expiresAt,
+      )} giờ VN).`,
+      'Vì lý do an toàn, vui lòng KHÔNG chuyển tiếp email hay liên kết này cho người khác.',
+      '',
+      'Nếu bạn KHÔNG yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này — mật khẩu hiện tại của bạn vẫn giữ nguyên.',
+    ].join('\n');
+  }
+
+  private buildPasswordResetHtml(
+    data: PasswordResetData,
+    resetUrl: string,
+  ): string {
+    return [
+      '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#191919">',
+      `<p>Xin chào <strong>${escapeHtml(data.name)}</strong>,</p>`,
+      '<p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn trên hệ thống quản trị (CMS) website Thiên Đức.</p>',
+      `<p style="margin:24px 0"><a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:10px 20px;background:#1a56db;color:#ffffff;text-decoration:none;border-radius:6px">Đặt lại mật khẩu</a></p>`,
+      `<p style="color:#59646a">Liên kết này chỉ dùng được <strong>một lần</strong> và sẽ hết hạn sau <strong>20 phút</strong> (vào lúc ${VN_DATETIME.format(
+        data.expiresAt,
+      )} giờ VN). Vì lý do an toàn, vui lòng <strong>không chuyển tiếp</strong> email hay liên kết này cho người khác.</p>`,
+      '<p style="color:#59646a">Nếu bạn <strong>không</strong> yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này — mật khẩu hiện tại của bạn vẫn giữ nguyên.</p>',
+      '</div>',
+    ].join('');
   }
 
   private buildInvitationText(

@@ -74,8 +74,34 @@ model User {
   reviewedProfileChanges ProfileChangeRequest[] @relation("ProfileChangeReviewer")
   invitationsReceived    AccountInvitation[]    @relation("InvitationRecipient")
   invitationsSent        AccountInvitation[]    @relation("InvitationSender")
+  passwordResetTokens    PasswordResetToken[]
 
   @@map("users")
+}
+
+/**
+ * Token đặt lại mật khẩu (quên mật khẩu) — bảng RIÊNG, tuyệt đối KHÔNG tái dùng
+ * AccountInvitation: mục đích, người khởi tạo (chính chủ vs SUPER_ADMIN) và vòng
+ * đời khác nhau. Token gốc không bao giờ lưu — chỉ lưu `tokenHash` (SHA-256),
+ * theo đúng mẫu opaque-token đã dùng ở AccountInvitation/RefreshToken. Mỗi link
+ * dùng một lần: hết hạn / đã dùng (`usedAt`) / đã thu hồi (`revokedAt`) đều vô
+ * hiệu. Xóa User → token đặt lại cascade theo.
+ */
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // userId: tra cứu token hiện có của một tài khoản (cooldown/revoke).
+  // expiresAt: dọn dẹp định kỳ các token đã hết hạn.
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 /**

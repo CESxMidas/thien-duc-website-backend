@@ -42,13 +42,18 @@ async function main() {
 
   await client.connect();
   const res = await client.query(
-    `INSERT INTO users (id, email, password_hash, name, role, is_active, created_at, updated_at)
-     VALUES (gen_random_uuid(), $1, $2, $3, $4, true, now(), now())
+    // setup_completed_at phải non-null: từ khi có luồng lời mời, login chặn tài
+    // khoản còn "chờ thiết lập" (setupCompletedAt = null). Tài khoản bootstrap do
+    // seed tạo phải đăng nhập được ngay. COALESCE khi conflict để KHÔNG ghi đè
+    // mốc cũ của user đã tồn tại (chỉ điền khi đang null).
+    `INSERT INTO users (id, email, password_hash, name, role, is_active, setup_completed_at, created_at, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, true, now(), now(), now())
      ON CONFLICT (email) DO UPDATE
        SET password_hash = EXCLUDED.password_hash,
            name = EXCLUDED.name,
            role = EXCLUDED.role,
            is_active = true,
+           setup_completed_at = COALESCE(users.setup_completed_at, now()),
            failed_login_attempts = 0,
            locked_until = NULL,
            updated_at = now()

@@ -72,6 +72,11 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
   });
 
   afterAll(async () => {
+    // Nếu beforeAll fail trước khi app khởi tạo, đừng gọi app.close()/request()
+    // trên biến undefined — sẽ nuốt mất lỗi setup gốc bằng một TypeError khác.
+    if (!app) {
+      return;
+    }
     // Dọn bài test nếu còn (kể cả khi test giữa chừng fail).
     if (accessToken) {
       await request(http)

@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, Optional, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { Role } from '../../generated/prisma/client';
+import { MailOutboxService } from './mail-outbox.service';
 
 /** Dữ liệu tối thiểu để dựng email báo lead mới (lấy từ bản ghi đã lưu DB). */
 export interface ContactNotificationData {
@@ -92,10 +93,31 @@ export class MailService implements OnModuleInit {
   private notifyTo = '';
   /** Origin Admin SPA đã chuẩn hoá (bỏ dấu `/` cuối); '' nếu thiếu/không hợp lệ. */
   private adminAppUrl = '';
+  /**
+   * Transport giả (E2E cục bộ): thay vì gọi Resend, ghi email vào outbox trong
+   * bộ nhớ để test trích link. Chỉ bật khi NODE_ENV=test VÀ cờ tường minh
+   * MAIL_FAKE_TRANSPORT=1 — không có đường nào bật được ở production.
+   */
+  private fakeTransport = false;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly outbox?: MailOutboxService,
+  ) {}
 
   onModuleInit(): void {
+    // Cờ transport giả — tính TRƯỚC cấu hình Resend. Hai điều kiện AND: môi trường
+    // test + cờ tường minh. Thiếu một trong hai → giữ nguyên đường Resend thật.
+    this.fakeTransport =
+      (process.env.NODE_ENV ?? 'production') === 'test' &&
+      this.config.get<string>('MAIL_FAKE_TRANSPORT') === '1';
+    if (this.fakeTransport) {
+      // Log quan sát an toàn (không secret/PII/URL/token).
+      this.logger.warn(
+        'MailService: TRANSPORT GIẢ đang bật (NODE_ENV=test + MAIL_FAKE_TRANSPORT=1) — email ghi vào outbox test, KHÔNG gọi Resend.',
+      );
+    }
+
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.from = this.config.get<string>('MAIL_FROM') ?? '';
     this.notifyTo = this.config.get<string>('CONTACT_NOTIFY_TO') ?? '';
@@ -194,6 +216,16 @@ export class MailService implements OnModuleInit {
    */
   async sendContactNotification(data: ContactNotificationData): Promise<void> {
     const ref = data.submissionId ?? 'unknown';
+    if (this.fakeTransport) {
+      this.captureToOutbox('contact', {
+        to: this.notifyTo || 'contact-notify@test.local',
+        subject: `[Website Thiên Đức] Liên hệ mới từ ${data.name}`,
+        text: this.buildText(data),
+        html: this.buildHtml(data),
+        url: null,
+      });
+      return;
+    }
     // Vừa để cảnh báo sớm, vừa để TypeScript thu hẹp kiểu `resend` khác null.
     const resend = this.resend;
     if (!resend || !this.notifyTo) {
@@ -246,6 +278,18 @@ export class MailService implements OnModuleInit {
    * gửi lại). KHÔNG log token, không log setup URL, không log payload email.
    */
   async sendAccountInvitation(data: AccountInvitationData): Promise<void> {
+    if (this.fakeTransport) {
+      const base = this.adminAppUrl || 'http://localhost:5174';
+      const setupUrl = this.buildInvitationSetupUrl(data.token, base);
+      this.captureToOutbox('invitation', {
+        to: data.to,
+        subject: 'Thiết lập tài khoản quản trị CMS',
+        text: this.buildInvitationText(data, setupUrl),
+        html: this.buildInvitationHtml(data, setupUrl),
+        url: setupUrl,
+      });
+      return;
+    }
     // Điều kiện lời mời ĐỘC LẬP với CONTACT_NOTIFY_TO: chỉ cần Resend +
     // ADMIN_APP_URL. `const resend` cũng để TypeScript thu hẹp kiểu khác null.
     const resend = this.resend;
@@ -302,6 +346,18 @@ export class MailService implements OnModuleInit {
    * URL, không log payload email.
    */
   async sendPasswordResetEmail(data: PasswordResetData): Promise<void> {
+    if (this.fakeTransport) {
+      const base = this.adminAppUrl || 'http://localhost:5174';
+      const resetUrl = this.buildPasswordResetUrl(data.token, base);
+      this.captureToOutbox('password-reset', {
+        to: data.to,
+        subject: 'Đặt lại mật khẩu CMS',
+        text: this.buildPasswordResetText(data, resetUrl),
+        html: this.buildPasswordResetHtml(data, resetUrl),
+        url: resetUrl,
+      });
+      return;
+    }
     const resend = this.resend;
     if (!resend) {
       this.logger.warn(
@@ -347,17 +403,58 @@ export class MailService implements OnModuleInit {
   }
 
   /** Dựng link thiết lập bằng URL API để token được mã hoá đúng chuẩn query. */
-  private buildInvitationSetupUrl(token: string): string {
-    const url = new URL(SETUP_PATH, `${this.adminAppUrl}/`);
+  private buildInvitationSetupUrl(
+    token: string,
+    base = this.adminAppUrl,
+  ): string {
+    const url = new URL(SETUP_PATH, `${base}/`);
     url.searchParams.set('token', token);
     return url.toString();
   }
 
   /** Dựng link đặt lại mật khẩu; token mã hoá đúng chuẩn query. */
-  private buildPasswordResetUrl(token: string): string {
-    const url = new URL(RESET_PATH, `${this.adminAppUrl}/`);
+  private buildPasswordResetUrl(
+    token: string,
+    base = this.adminAppUrl,
+  ): string {
+    const url = new URL(RESET_PATH, `${base}/`);
     url.searchParams.set('token', token);
     return url.toString();
+  }
+
+  /**
+   * Ghi email vào outbox test (chế độ transport giả). Chỉ log loại + thời điểm —
+   * KHÔNG log recipient/subject/URL/token để không rò dữ liệu nhạy cảm ra log.
+   */
+  private captureToOutbox(
+    type: 'contact' | 'invitation' | 'password-reset',
+    entry: {
+      to: string;
+      subject: string;
+      text: string;
+      html: string;
+      url: string | null;
+    },
+  ): void {
+    if (!this.outbox) {
+      this.logger.warn(
+        `MailService: transport giả bật nhưng thiếu MailOutboxService — bỏ qua ghi outbox (type=${type}).`,
+      );
+      return;
+    }
+    // Giả lập nhà cung cấp email lỗi cho email liên hệ: KHÔNG ghi outbox và
+    // KHÔNG ném lỗi (giữ đúng hợp đồng never-throw của sendContactNotification)
+    // → lead vẫn được lưu, UI vẫn thành công dù "email" thất bại.
+    if (type === 'contact' && this.outbox.isFailMode()) {
+      this.logger.warn(
+        'MailService: giả lập lỗi provider email (fail-mode) — bỏ ghi outbox liên hệ.',
+      );
+      return;
+    }
+    this.outbox.record({ type, ...entry });
+    this.logger.log(
+      `MailService: đã ghi email vào outbox test (type=${type}).`,
+    );
   }
 
   private buildPasswordResetText(

@@ -1,0 +1,70 @@
+[
+  {
+    "image": "/images/banners/home/home-banner-hung-phu-master-plan-02.jpg",
+    "objectPosition": "35% center",
+    "eyebrow": { "vi": "Dự án tiêu biểu", "en": "Featured project" },
+    "title": {
+      "vi": "Khu đô thị Hưng Phú, TP. Bến Tre",
+      "en": "Hung Phu Urban Area, Ben Tre City"
+    },
+    "subtitle": {
+      "vi": "11,25 ha mặt tiền Nguyễn Thị Định: 330 căn nhà ở thấp tầng, chung cư Fancy Tower, hạ tầng đã hoàn thiện.",
+      "en": "11.25 hectares on Nguyen Thi Dinh Street: 330 low-rise homes, the Fancy Tower block, infrastructure complete."
+    },
+    "ctaLabel": { "vi": "Xem chi tiết dự án", "en": "Explore the project" },
+    "href": "/du-an/khu-do-thi-hung-phu",
+    "order": 0,
+    "isActive": true
+  },
+  {
+    "image": "/images/banners/home/home-banner-hung-phu-aerial-01.jpg",
+    "objectPosition": "45% center",
+    "eyebrow": { "vi": "Hạng mục nổi bật", "en": "Signature building" },
+    "title": {
+      "vi": "Fancy Tower — 196 căn hộ tại Hưng Phú",
+      "en": "Fancy Tower — 196 homes at Hung Phu"
+    },
+    "subtitle": {
+      "vi": "19 tầng nổi và 1 tầng hầm, đã nghiệm thu hoàn thành công trình và bàn giao đưa vào vận hành.",
+      "en": "Nineteen storeys over one basement, now inspected, completed and handed over to residents."
+    },
+    "ctaLabel": { "vi": "Xem hạng mục căn hộ", "en": "View the apartments" },
+    "href": "/du-an/khu-do-thi-hung-phu/fancy-tower",
+    "order": 1,
+    "isActive": true
+  },
+  {
+    "image": "/images/banners/home/home-banner-hung-phu-fancy-tower-01.jpg",
+    "objectPosition": "center center",
+    "eyebrow": { "vi": "Danh mục dự án", "en": "Project portfolio" },
+    "title": {
+      "vi": "Dự án Thiên Đức tại các tỉnh phía Nam",
+      "en": "Thien Duc projects across the south"
+    },
+    "subtitle": {
+      "vi": "Từ tổ hợp căn hộ tại TP.HCM và Vũng Tàu đến khu đô thị quy mô lớn tại Bến Tre — vị trí, quy mô, tiến độ.",
+      "en": "From apartment complexes in Ho Chi Minh City and Vung Tau to a large urban project in Ben Tre — scale and progress."
+    },
+    "ctaLabel": { "vi": "Xem toàn bộ dự án", "en": "Browse all projects" },
+    "href": "/du-an",
+    "order": 2,
+    "isActive": true
+  },
+  {
+    "image": "/images/banners/home/home-banner-hung-phu-master-plan-top-01.jpg",
+    "objectPosition": "center center",
+    "eyebrow": { "vi": "Giới thiệu công ty", "en": "About Thien Duc" },
+    "title": {
+      "vi": "Thiên Đức — xây dựng từ năm 2010",
+      "en": "Thien Duc — building since 2010"
+    },
+    "subtitle": {
+      "vi": "Từ hợp tác cùng CapitaLand tại TP.HCM đến vai trò chủ đầu tư khu đô thị phía Nam: Uy tín — Chất lượng — Bền vững.",
+      "en": "From co-developing with CapitaLand in Ho Chi Minh City to leading urban projects in the south: integrity and quality."
+    },
+    "ctaLabel": { "vi": "Tìm hiểu về Thiên Đức", "en": "Learn about Thien Duc" },
+    "href": "/gioi-thieu",
+    "order": 3,
+    "isActive": true
+  }
+]

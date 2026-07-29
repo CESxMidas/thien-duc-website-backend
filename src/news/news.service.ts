@@ -26,11 +26,63 @@ export class NewsService {
   findAll(publishedOnly = false) {
     return this.prisma.newsPost.findMany({
       where: publishedOnly ? { status: ContentStatus.PUBLISHED } : undefined,
-      // Bài nháp chưa có publishedAt nên sắp theo updatedAt ở màn admin để
-      // không bị dồn xuống cuối danh sách.
-      orderBy: publishedOnly ? { publishedAt: 'desc' } : { updatedAt: 'desc' },
+      orderBy: this.listOrderBy(publishedOnly),
       include: { category: true },
     });
+  }
+
+  /**
+   * Một trang bài đã đăng, kèm metadata điều hướng.
+   *
+   * Đếm và lấy trang chạy trong **một** transaction để tổng số bài và nội dung
+   * trang luôn thuộc cùng một ảnh chụp dữ liệu — nếu không, một bài được đăng
+   * xen giữa hai truy vấn sẽ làm `totalPages` lệch với thứ tự trang đang trả.
+   */
+  async findAllPaginated(page: number, limit: number) {
+    const where = { status: ContentStatus.PUBLISHED };
+
+    const [totalItems, items] = await this.prisma.$transaction([
+      this.prisma.newsPost.count({ where }),
+      this.prisma.newsPost.findMany({
+        where,
+        orderBy: this.listOrderBy(true),
+        include: { category: true },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return {
+      items,
+      page,
+      limit,
+      totalItems,
+      totalPages,
+      // Trang vượt quá cuối danh sách trả mảng rỗng chứ không lỗi — client tự
+      // quyết định chuyển hướng hay báo trống. `hasNextPage` vẫn phải là false
+      // ở đó, nên so với `totalPages` chứ không so với số phần tử trả về.
+      hasNextPage: page < totalPages,
+      hasPreviousPage: page > 1,
+    };
+  }
+
+  /**
+   * Bài nháp chưa có `publishedAt` nên màn admin sắp theo `updatedAt`, không thì
+   * bị dồn xuống cuối danh sách.
+   *
+   * Khoá phụ `id desc` là **bắt buộc** cho danh sách công khai: nhiều bài nhập
+   * cùng đợt có `publishedAt` trùng nhau tới từng giây, mà `ORDER BY` một khoá
+   * không phân định được thì Postgres được phép trả thứ tự khác nhau giữa các
+   * lần chạy — phân trang sẽ lặp bài ở trang này và nuốt bài ở trang kia.
+   */
+  private listOrderBy(
+    publishedOnly: boolean,
+  ): Prisma.NewsPostOrderByWithRelationInput[] {
+    return publishedOnly
+      ? [{ publishedAt: 'desc' }, { id: 'desc' }]
+      : [{ updatedAt: 'desc' }, { id: 'desc' }];
   }
 
   /**

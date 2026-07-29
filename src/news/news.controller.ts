@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
+import { NEWS_DEFAULT_PAGE_SIZE, QueryNewsDto } from './dto/query-news.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
 import { UpdateNewsPostDto } from './dto/update-news-post.dto';
 import { NewsSchedulerService } from './news-scheduler.service';
@@ -99,9 +101,26 @@ export class NewsController {
     return this.newsService.findBySlug(slug);
   }
 
+  /**
+   * Danh sách công khai (chỉ bài PUBLISHED).
+   *
+   * Tương thích ngược có chủ đích: **không** truyền `page`/`limit` thì trả mảng
+   * phẳng như trước, nên trang chủ, sitemap và mọi consumer cũ không phải sửa.
+   * Có `page` hoặc `limit` thì trả envelope phân trang.
+   */
+  @ApiOperation({
+    summary:
+      'Bài đã đăng. Có `page`/`limit` → envelope phân trang; không có → mảng phẳng (giữ tương thích).',
+  })
   @Get()
-  findAll() {
-    return this.newsService.findAll(true);
+  findAll(@Query() query: QueryNewsDto) {
+    if (query.page === undefined && query.limit === undefined) {
+      return this.newsService.findAll(true);
+    }
+    return this.newsService.findAllPaginated(
+      query.page ?? 1,
+      query.limit ?? NEWS_DEFAULT_PAGE_SIZE,
+    );
   }
 
   @Get(':slug')

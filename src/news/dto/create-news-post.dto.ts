@@ -8,6 +8,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { LongTranslatedTextDto } from '../../common/dto/long-translated-text.dto';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreateNewsPostDto {
@@ -29,13 +30,17 @@ export class CreateNewsPostDto {
   /**
    * Nội dung bài viết là **mảng đoạn văn**, mỗi đoạn là một field song ngữ —
    * khớp `NewsPostDto.content: LocalizedText[]` mà frontend đang đọc.
+   *
+   * Dùng `LongTranslatedTextDto` (trần 100_000/đoạn) chứ không phải
+   * `TranslatedTextDto` (5000): đây là nội dung biên tập dài, xem lý do ở
+   * `common/dto/long-translated-text.dto.ts`.
    */
-  @ApiProperty({ type: [TranslatedTextDto], required: false })
+  @ApiProperty({ type: [LongTranslatedTextDto], required: false })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => TranslatedTextDto)
-  content?: TranslatedTextDto[];
+  @Type(() => LongTranslatedTextDto)
+  content?: LongTranslatedTextDto[];
 
   // UUID (36 ký tự) — 60 cho dư địa nếu đổi định dạng id.
   @ApiProperty({ required: false, maxLength: 60 })

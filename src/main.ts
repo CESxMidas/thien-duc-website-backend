@@ -7,6 +7,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { JSON_BODY_LIMIT } from './common/body-limit';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { configureTrustProxy } from './common/trust-proxy';
@@ -20,6 +21,10 @@ async function bootstrap() {
   configureTrustProxy(app);
 
   app.use(helmet());
+
+  // Nới trần body JSON khỏi mặc định 100 kb của Express — xem `body-limit.ts`.
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
+  app.useBodyParser('urlencoded', { limit: JSON_BODY_LIMIT, extended: true });
 
   // CORS_ORIGIN bắt buộc — không fallback thành wildcard để tránh vô tình mở công khai
   const corsOrigin = configService.get<string>('CORS_ORIGIN');

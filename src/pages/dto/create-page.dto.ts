@@ -7,6 +7,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { LongTranslatedTextDto } from '../../common/dto/long-translated-text.dto';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 
 export class CreatePageDto {
@@ -26,11 +27,15 @@ export class CreatePageDto {
    *
    * Trước đây khai `@IsObject()`, nhưng class-validator **loại mảng ra khỏi
    * "object"** — nên mọi lần Admin tạo/sửa trang nội dung đều nhận `400`.
+   *
+   * Dùng `LongTranslatedTextDto` (trần 100_000/đoạn) chứ không phải
+   * `TranslatedTextDto` (5000): đây là nội dung biên tập dài, xem lý do ở
+   * `common/dto/long-translated-text.dto.ts`.
    */
-  @ApiProperty({ type: [TranslatedTextDto] })
+  @ApiProperty({ type: [LongTranslatedTextDto] })
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
-  @Type(() => TranslatedTextDto)
-  content!: TranslatedTextDto[];
+  @Type(() => LongTranslatedTextDto)
+  content!: LongTranslatedTextDto[];
 }

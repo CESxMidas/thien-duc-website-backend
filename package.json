@@ -31,7 +31,8 @@
     "prisma:seed:cooperation": "node prisma/seed-cooperation.js",
     "prisma:seed:banners": "node prisma/seed-banners.js",
     "prisma:backfill:map-labels": "node prisma/backfill-map-labels.js",
-    "prisma:backfill:project-items": "node prisma/backfill-project-items.js"
+    "prisma:backfill:project-items": "node prisma/backfill-project-items.js",
+    "prisma:seed:news:local-slider": "node prisma/seed-news-local-slider.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

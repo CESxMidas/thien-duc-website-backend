@@ -50,6 +50,12 @@ jobs:
       JWT_ACCESS_SECRET: e2e-only-secret-not-used-anywhere-else
       ADMIN_EMAIL: e2e-admin@example.com
       ADMIN_PASSWORD: e2e-password-123
+      # BẮT BUỘC: `prisma/seed.js` mặc định ADMIN_ROLE = SUPER_ADMIN, mà
+      # SUPER_ADMIN được bỏ qua luồng duyệt (`initialContentStatus`) nên bài
+      # tạo mới ra thẳng PUBLISHED. Smoke test lại khẳng định bài mới phải là
+      # DRAFT → thiếu dòng này là CI đỏ với "Expected: DRAFT / Received:
+      # PUBLISHED". Tài khoản bootstrap E2E phải đúng vai trò ADMIN.
+      ADMIN_ROLE: ADMIN
       CORS_ORIGIN: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +72,11 @@ jobs:
       - run: npx prisma migrate deploy
 
       - run: npm run prisma:seed
+
+      # Chốt sớm: nếu tài khoản bootstrap sai vai trò thì dừng ngay ở đây với
+      # thông điệp chỉ đúng nguyên nhân, thay vì để smoke test báo "Expected:
+      # DRAFT / Received: PUBLISHED" ở tận cuối. Chỉ in role/setup/active.
+      - run: npm run prisma:verify:bootstrap
 
       # test:e2e = smoke HTTP + integration PostgreSQL thật (auth-integration).
       # e2e-setup.ts bật MAIL_FAKE_TRANSPORT=1 để test tương tranh tất định.

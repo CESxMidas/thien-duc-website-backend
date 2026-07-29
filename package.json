@@ -23,6 +23,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.js",
+    "prisma:verify:bootstrap": "node prisma/verify-bootstrap.js",
     "prisma:seed:projects": "node prisma/seed-projects.js",
     "prisma:seed:news": "node prisma/seed-news.js",
     "prisma:seed:pages": "node prisma/seed-pages.js",

@@ -32,6 +32,19 @@ type NewsPostBody = {
   title: { vi: string; en?: string };
 };
 
+type MeBody = { id: string; email: string; name: string; role: string };
+
+/**
+ * Vai trò BẮT BUỘC của tài khoản bootstrap E2E.
+ *
+ * `initialContentStatus()` cho SUPER_ADMIN bỏ qua luồng duyệt → bài tạo mới ra
+ * thẳng `PUBLISHED`. Smoke test dưới đây khẳng định bài mới phải là `DRAFT`, nên
+ * chỉ đúng khi đăng nhập bằng tài khoản **ADMIN**. `prisma/seed.js` mặc định
+ * `ADMIN_ROLE = SUPER_ADMIN`, vì vậy môi trường chạy test PHẢI đặt
+ * `ADMIN_ROLE=ADMIN` (xem job `e2e` trong `.github/workflows/ci.yml`).
+ */
+const REQUIRED_BOOTSTRAP_ROLE = 'ADMIN';
+
 // Slug duy nhất mỗi lần chạy — chạy lại không đụng bản ghi cũ còn sót.
 const SLUG = `e2e-smoke-${Date.now()}`;
 
@@ -108,6 +121,30 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
     expect(body.success).toBe(true);
     expect(typeof body.data.accessToken).toBe('string');
     accessToken = body.data.accessToken;
+  });
+
+  // Chốt CHẨN ĐOÁN trước khi khẳng định DRAFT: nếu tài khoản bootstrap bị seed
+  // sai vai trò thì fail ngay tại đây với thông điệp chỉ đúng nguyên nhân, thay
+  // vì để test sau báo "Expected: DRAFT / Received: PUBLISHED" — triệu chứng đó
+  // không nói được rằng lỗi nằm ở env seed chứ không phải ở logic news.
+  // KHÔNG in email, mật khẩu, JWT, cookie hay DATABASE_URL.
+  it('tài khoản bootstrap phải có vai trò ADMIN (chẩn đoán seed/env)', async () => {
+    const res = await request(http)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const { role } = (res.body as Envelope<MeBody>).data;
+    // `expect()` của jest KHÔNG nhận tham số message, nên ném lỗi tường minh để
+    // thông điệp chẩn đoán thực sự hiện trong log CI. `role` chỉ là enum
+    // (EDITOR/ADMIN/SUPER_ADMIN) — in ra an toàn, không phải dữ liệu nhạy cảm.
+    if (role !== REQUIRED_BOOTSTRAP_ROLE) {
+      throw new Error(
+        'Expected bootstrap E2E account role ADMIN. ' +
+          `Check ADMIN_ROLE and seed upsert. (đang nhận: ${role})`,
+      );
+    }
+    expect(role).toBe(REQUIRED_BOOTSTRAP_ROLE);
   });
 
   it('tạo bài nháp — mặc định DRAFT, chưa có publishedAt', async () => {

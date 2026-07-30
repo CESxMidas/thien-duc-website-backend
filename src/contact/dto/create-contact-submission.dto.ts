@@ -6,6 +6,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { IsNotBlank } from '../../common/validators/not-blank';
 
 // Trần độ dài (finding #9 audit): endpoint công khai không đăng nhập — chặn
 // payload khổng lồ gây DoS/phình DB. FE đặt `maxLength` khớp các hằng này
@@ -14,11 +15,13 @@ export class CreateContactSubmissionDto {
   @ApiProperty({ maxLength: 120 })
   @IsString()
   @MaxLength(120)
+  @IsNotBlank()
   name!: string;
 
   @ApiProperty({ maxLength: 30 })
   @IsString()
   @MaxLength(30)
+  @IsNotBlank()
   phone!: string;
 
   @ApiProperty({ required: false, maxLength: 200 })
@@ -37,5 +40,6 @@ export class CreateContactSubmissionDto {
   @IsString()
   @MinLength(1)
   @MaxLength(5000)
+  @IsNotBlank()
   message!: string;
 }

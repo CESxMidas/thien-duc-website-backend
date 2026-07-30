@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
+import { IsSafeImageRef } from '../../common/validators/safe-url';
 
 export class CreateGalleryImageDto {
   @ApiProperty({
@@ -19,6 +20,7 @@ export class CreateGalleryImageDto {
   @IsString()
   @IsUrl({ require_tld: false, require_protocol: false })
   @MaxLength(500)
+  @IsSafeImageRef()
   url!: string;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })

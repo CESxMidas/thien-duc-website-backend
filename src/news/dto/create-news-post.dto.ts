@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
+  IsDefined,
   IsOptional,
   IsString,
   MaxLength,
@@ -10,19 +12,25 @@ import {
 } from 'class-validator';
 import { LongTranslatedTextDto } from '../../common/dto/long-translated-text.dto';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
+import { IsSafeImageRef } from '../../common/validators/safe-url';
+import { IsNotBlank } from '../../common/validators/not-blank';
+import { MAX_CONTENT_BLOCKS } from '../../common/dto/content-blocks';
 
 export class CreateNewsPostDto {
   @ApiProperty({ maxLength: 160 })
   @IsString()
   @MaxLength(160)
+  @IsNotBlank()
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   title!: TranslatedTextDto;
 
   @ApiProperty({ type: TranslatedTextDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   summary!: TranslatedTextDto;
@@ -40,6 +48,7 @@ export class CreateNewsPostDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => LongTranslatedTextDto)
+  @ArrayMaxSize(MAX_CONTENT_BLOCKS)
   content?: LongTranslatedTextDto[];
 
   // UUID (36 ký tự) — 60 cho dư địa nếu đổi định dạng id.
@@ -59,6 +68,7 @@ export class CreateNewsPostDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @IsSafeImageRef()
   image?: string;
 
   @ApiProperty({ required: false })

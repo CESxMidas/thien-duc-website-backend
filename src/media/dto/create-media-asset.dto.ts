@@ -1,10 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsSafeImageRef } from '../../common/validators/safe-url';
 
 export class CreateMediaAssetDto {
   @ApiProperty({ maxLength: 500 })
   @IsString()
   @MaxLength(500)
+  @IsSafeImageRef()
   url!: string;
 
   // public_id Cloudinary gồm thư mục + tên file — 300 là dư dả.

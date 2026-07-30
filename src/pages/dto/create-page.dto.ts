@@ -1,22 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsDefined,
   IsString,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { LongTranslatedTextDto } from '../../common/dto/long-translated-text.dto';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
+import { IsNotBlank } from '../../common/validators/not-blank';
+import { MAX_CONTENT_BLOCKS } from '../../common/dto/content-blocks';
 
 export class CreatePageDto {
   @ApiProperty({ maxLength: 160 })
   @IsString()
   @MaxLength(160)
+  @IsNotBlank()
   slug!: string;
 
   @ApiProperty({ type: TranslatedTextDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   title!: TranslatedTextDto;
@@ -37,5 +43,6 @@ export class CreatePageDto {
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => LongTranslatedTextDto)
+  @ArrayMaxSize(MAX_CONTENT_BLOCKS)
   content!: LongTranslatedTextDto[];
 }

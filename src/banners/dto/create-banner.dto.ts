@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDefined,
   IsInt,
   IsOptional,
   IsString,
@@ -9,11 +10,16 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
+import {
+  IsSafeImageRef,
+  IsSafeInternalPath,
+} from '../../common/validators/safe-url';
 
 export class CreateBannerDto {
   @ApiProperty({ maxLength: 500 })
   @IsString()
   @MaxLength(500)
+  @IsSafeImageRef()
   image!: string;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
@@ -23,6 +29,7 @@ export class CreateBannerDto {
   eyebrow?: TranslatedTextDto;
 
   @ApiProperty({ type: TranslatedTextDto })
+  @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   title!: TranslatedTextDto;
@@ -36,6 +43,7 @@ export class CreateBannerDto {
   @ApiProperty({ maxLength: 500 })
   @IsString()
   @MaxLength(500)
+  @IsSafeInternalPath()
   href!: string;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })

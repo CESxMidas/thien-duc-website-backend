@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotBlank } from '../validators/not-blank';
 
 /**
  * Trần cho **một đoạn nội dung dài** (bài viết, trang tĩnh).
@@ -30,6 +31,7 @@ export class LongTranslatedTextDto {
   @ApiProperty({ maxLength: MAX_LONG_TEXT_LENGTH })
   @IsString()
   @MaxLength(MAX_LONG_TEXT_LENGTH)
+  @IsNotBlank()
   vi!: string;
 
   @ApiProperty({ required: false, maxLength: MAX_LONG_TEXT_LENGTH })

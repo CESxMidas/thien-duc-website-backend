@@ -29,6 +29,17 @@ jobs:
 
   # E2E smoke (task →8): Postgres dùng một lần trong CI — credentials bên dưới
   # là giá trị vứt đi của service container, KHÔNG phải secret production.
+  #
+  # Tên DB PHẢI là `thien_duc_test`: cầu chì an toàn của `prisma/seed-e2e.js`
+  # (và của workflow full-stack ở repo admin) chỉ cho seed chạy trên
+  # localhost/127.0.0.1 + đúng DB này.
+  #
+  # Bộ E2E cần HAI tài khoản bootstrap, không phải một:
+  #   ADMIN_EMAIL       → vai trò ADMIN       (app.e2e-spec.ts: bài mới = DRAFT)
+  #   SUPER_ADMIN_EMAIL → vai trò SUPER_ADMIN (http-foundation.e2e-spec.ts)
+  # `prisma/seed.js` chỉ gieo được một tài khoản → dùng `prisma db seed`
+  # (= seed-e2e.js) để gieo cả hai. Toàn bộ env khai báo ở CẤP JOB nên seed,
+  # preflight, verify và test:e2e nhận CÙNG một bộ giá trị.
   e2e:
     runs-on: ubuntu-latest
     services:
@@ -37,7 +48,7 @@ jobs:
         env:
           POSTGRES_USER: thienduc_ci
           POSTGRES_PASSWORD: thienduc_ci
-          POSTGRES_DB: thien_duc_e2e
+          POSTGRES_DB: thien_duc_test
         ports:
           - 5432:5432
         options: >-
@@ -46,17 +57,30 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://thienduc_ci:thienduc_ci@localhost:5432/thien_duc_e2e?schema=public
+      NODE_ENV: test
+      # Chặn mọi lời gọi email thật (Resend) trong E2E. e2e-setup.ts cũng bật cờ
+      # này trong tiến trình jest, nhưng seed/preflight chạy ngoài jest nên phải
+      # khai ở đây để cả job dùng chung một hợp đồng.
+      MAIL_FAKE_TRANSPORT: '1'
+      DATABASE_URL: postgresql://thienduc_ci:thienduc_ci@localhost:5432/thien_duc_test?schema=public
       JWT_ACCESS_SECRET: e2e-only-secret-not-used-anywhere-else
-      ADMIN_EMAIL: e2e-admin@example.com
-      ADMIN_PASSWORD: e2e-password-123
-      # BẮT BUỘC: `prisma/seed.js` mặc định ADMIN_ROLE = SUPER_ADMIN, mà
-      # SUPER_ADMIN được bỏ qua luồng duyệt (`initialContentStatus`) nên bài
-      # tạo mới ra thẳng PUBLISHED. Smoke test lại khẳng định bài mới phải là
-      # DRAFT → thiếu dòng này là CI đỏ với "Expected: DRAFT / Received:
+      CORS_ORIGIN: http://localhost:3000
+      # Email test KHÔNG bí mật → để thẳng ở job level cho tất định.
+      # `.local` là TLD dự phòng, không thể gửi thư ra ngoài.
+      SUPER_ADMIN_EMAIL: superadmin-e2e@test.local
+      ADMIN_EMAIL: admin-e2e@test.local
+      # BẮT BUỘC: SUPER_ADMIN được bỏ qua luồng duyệt (`initialContentStatus`)
+      # nên bài tạo mới ra thẳng PUBLISHED. Smoke test lại khẳng định bài mới
+      # phải là DRAFT → thiếu dòng này là CI đỏ với "Expected: DRAFT / Received:
       # PUBLISHED". Tài khoản bootstrap E2E phải đúng vai trò ADMIN.
       ADMIN_ROLE: ADMIN
-      CORS_ORIGIN: http://localhost:3000
+      # Mật khẩu lấy từ GitHub Actions secrets nếu repo đã cấu hình
+      # (E2E_SUPER_ADMIN_PASSWORD / E2E_ADMIN_PASSWORD). Chưa cấu hình thì dùng
+      # giá trị giả dùng-một-lần bên dưới để CI vẫn tất định — đây KHÔNG phải
+      # credential production, chỉ sống trong container Postgres bị hủy sau job.
+      # Tuyệt đối không dùng secret production ở job này.
+      SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD || 'CiTestPassword123!' }}
+      ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'CiTestPassword123!' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,17 +91,28 @@ jobs:
 
       - run: npm ci
 
+      # Chốt SỚM NHẤT: thiếu/sai biến môi trường thì dừng ngay với danh sách tên
+      # biến, thay vì để 45 test cùng đỏ ở beforeAll. Chỉ in TÊN biến, không in
+      # giá trị (không email, không mật khẩu, không DATABASE_URL).
+      - name: Preflight môi trường E2E
+        run: npm run e2e:preflight
+
       - run: npx prisma validate
+
+      - run: npx prisma generate
 
       - run: npx prisma migrate deploy
 
-      - run: npm run prisma:seed
+      # `prisma db seed` → prisma/seed-e2e.js: gieo CẢ HAI tài khoản
+      # (SUPER_ADMIN + ADMIN) mà bộ E2E cần, idempotent, có cầu chì an toàn.
+      - name: Seed hai tài khoản bootstrap E2E
+        run: npx prisma db seed
 
-      # Chốt sớm: nếu tài khoản bootstrap sai vai trò thì dừng ngay ở đây với
-      # thông điệp chỉ đúng nguyên nhân, thay vì để smoke test báo "Expected:
+      # Chốt sau seed: sai vai trò / chưa thiết lập / bị vô hiệu thì dừng ngay
+      # với thông điệp chỉ đúng nguyên nhân, thay vì để smoke test báo "Expected:
       # DRAFT / Received: PUBLISHED" ở tận cuối. Chỉ in role/setup/active.
       - run: npm run prisma:verify:bootstrap
 
-      # test:e2e = smoke HTTP + integration PostgreSQL thật (auth-integration).
-      # e2e-setup.ts bật MAIL_FAKE_TRANSPORT=1 để test tương tranh tất định.
+      # test:e2e = smoke HTTP (app) + HTTP foundation + integration PostgreSQL
+      # thật (auth-integration). Nhận đúng bộ env cấp job như seed ở trên.
       - run: npm run test:e2e

@@ -16,7 +16,6 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateAccountInvitationDto } from './dto/create-account-invitation.dto';
-import { CreateUserDto } from './dto/create-user.dto';
 import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -79,15 +78,11 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
-  @Roles(Role.SUPER_ADMIN)
-  @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
-  }
-
-  // ⚠️ Đường tạo trực tiếp bằng mật khẩu (POST /users, ở trên) vẫn giữ tạm
-  // thời trong Phase 2A — sẽ được xem xét loại bỏ sau khi luồng lời mời ổn
-  // định (xem CMS-ACCOUNT-INVITATION-GREENFIELD-AUDIT-M1 §L).
+  // CMS-RETIRE-DIRECT-USER-CREATE-M1: `POST /users` (tạo tài khoản kèm mật
+  // khẩu, SUPER_ADMIN-only) đã bị **gỡ hẳn** — không còn stub, không còn 410.
+  // Cấp tài khoản chỉ còn MỘT đường: lời mời (`POST /users/invitations`) →
+  // người được mời tự đặt mật khẩu. Không quản trị viên nào đặt được mật khẩu
+  // cho người khác. Đừng thêm lại route tạo trực tiếp.
   @ApiOperation({
     summary: 'Tạo tài khoản qua lời mời — SUPER_ADMIN không đặt mật khẩu',
   })

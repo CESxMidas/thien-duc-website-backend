@@ -15,7 +15,6 @@ import { generateOpaqueToken } from '../common/utils/opaque-token.util';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAccountInvitationDto } from './dto/create-account-invitation.dto';
-import { CreateUserDto } from './dto/create-user.dto';
 import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -119,27 +118,6 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     return user;
-  }
-
-  async create(dto: CreateUserDto) {
-    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    try {
-      return await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          name: dto.name,
-          role: dto.role,
-          passwordHash,
-        },
-        select: PUBLIC_FIELDS,
-      });
-    } catch (error) {
-      // Email trùng: trả 409 thay vì để lỗi Prisma nổi lên thành 500.
-      if (isUniqueViolation(error)) {
-        throw new ConflictException('Email này đã được sử dụng');
-      }
-      throw error;
-    }
   }
 
   /* -----------------------------------------------------------------------

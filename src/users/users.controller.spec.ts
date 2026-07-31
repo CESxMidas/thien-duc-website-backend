@@ -1,3 +1,4 @@
+import { RequestMethod } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '../../generated/prisma/client';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
@@ -34,8 +35,8 @@ describe('UsersController @Roles (R3: ADMIN read-only, SUPER_ADMIN quản lý)',
     }
   });
 
-  it('Tạo/sửa/xóa (khóa)/đổi vai trò: chỉ SUPER_ADMIN', () => {
-    for (const handler of ['create', 'update', 'remove'] as const) {
+  it('Sửa/xóa (khóa)/đổi vai trò: chỉ SUPER_ADMIN', () => {
+    for (const handler of ['update', 'remove'] as const) {
       const roles = requiredRoles(handler);
       expect(roles).toEqual([Role.SUPER_ADMIN]);
       expect(roles).not.toContain(Role.ADMIN);
@@ -62,7 +63,6 @@ describe('UsersController @Roles (R3: ADMIN read-only, SUPER_ADMIN quản lý)',
     for (const handler of [
       'findAll',
       'findOne',
-      'create',
       'update',
       'remove',
       'createInvitation',
@@ -71,6 +71,35 @@ describe('UsersController @Roles (R3: ADMIN read-only, SUPER_ADMIN quản lý)',
     ] as const) {
       expect(requiredRoles(handler)).not.toContain(Role.EDITOR);
     }
+  });
+
+  // CMS-RETIRE-DIRECT-USER-CREATE-M1: route tạo trực tiếp kèm mật khẩu đã gỡ.
+  it('KHÔNG còn handler `create` — cấp tài khoản chỉ qua lời mời', () => {
+    expect(
+      (UsersController.prototype as unknown as Record<string, unknown>).create,
+    ).toBeUndefined();
+    const handlers = Object.getOwnPropertyNames(UsersController.prototype);
+    expect(handlers).not.toContain('create');
+    expect(handlers).toContain('createInvitation');
+  });
+
+  it('KHÔNG còn route POST "/users" gốc — mọi POST đều có path con', () => {
+    const postPaths = Object.getOwnPropertyNames(UsersController.prototype)
+      .filter((name) => name !== 'constructor')
+      .map((name) => {
+        const handler =
+          UsersController.prototype[name as keyof UsersController];
+        return {
+          path: reflector.get<string>('path', handler),
+          method: reflector.get<RequestMethod>('method', handler),
+        };
+      })
+      .filter((route) => route.method === RequestMethod.POST)
+      .map((route) => route.path);
+
+    expect(postPaths).toContain('invitations');
+    // `@Post()` không tham số được Nest lưu path '/' — không còn cái nào.
+    expect(postPaths).not.toContain('/');
   });
 
   it('Hồ sơ cá nhân self-service vẫn mở cho EDITOR trở lên (ngoài phạm vi)', () => {

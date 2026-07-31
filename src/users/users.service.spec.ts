@@ -159,41 +159,23 @@ describe('UsersService', () => {
     });
   });
 
-  describe('create', () => {
-    it('băm mật khẩu trước khi lưu', async () => {
-      prisma.user.create.mockResolvedValue(editor);
-
-      await service.create({
-        email: editor.email,
-        name: editor.name,
-        password: 'MatKhau123',
-        role: 'EDITOR',
-      });
-
-      expect(prisma.user.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ passwordHash: 'hashed' }),
-        }),
-      );
-      // Không bao giờ ghi mật khẩu thô xuống DB.
-      expect(prisma.user.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.not.objectContaining({ password: expect.anything() }),
-        }),
+  // CMS-RETIRE-DIRECT-USER-CREATE-M1
+  describe('tạo tài khoản trực tiếp (đã gỡ)', () => {
+    it('service KHÔNG còn phương thức create() nhận mật khẩu', () => {
+      expect(
+        (service as unknown as Record<string, unknown>).create,
+      ).toBeUndefined();
+      expect(Object.getOwnPropertyNames(UsersService.prototype)).not.toContain(
+        'create',
       );
     });
 
-    it('trả 409 khi email đã tồn tại (không phải 500)', async () => {
-      prisma.user.create.mockRejectedValue(uniqueViolation);
-
-      await expect(
-        service.create({
-          email: editor.email,
-          name: 'x',
-          password: 'MatKhau123',
-          role: 'EDITOR',
-        }),
-      ).rejects.toThrow(ConflictException);
+    it('createInvitation là lối cấp tài khoản duy nhất còn lại', () => {
+      const methods = Object.getOwnPropertyNames(UsersService.prototype);
+      expect(methods).toContain('createInvitation');
+      expect(methods.filter((m) => /^create/.test(m))).toEqual([
+        'createInvitation',
+      ]);
     });
   });
 

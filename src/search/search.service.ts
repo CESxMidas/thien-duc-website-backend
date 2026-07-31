@@ -24,9 +24,14 @@ export class SearchService {
   private async searchProjects(q: string, limit: number) {
     // SEC-INJ-001: Use plainto_tsquery instead of websearch_to_tsquery to prevent FTS operator injection
     // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
+    //
+    // YC-10: `immutable_unaccent` bọc TỪ KHOÁ để khớp với tsvector cũng đã bỏ
+    // dấu (xem migration 20260731120000_search_unaccent). Bọc một phía là vô
+    // nghĩa: tài liệu bỏ dấu mà truy vấn còn dấu thì không bao giờ khớp.
+    // `${q}` vẫn là tham số bind của Prisma — không nối chuỗi, không SQL injection.
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT p."id"
-      FROM "projects" p, plainto_tsquery('simple', ${q}) AS query
+      FROM "projects" p, plainto_tsquery('simple', immutable_unaccent(${q})) AS query
       WHERE p."content_status" = 'PUBLISHED'::"ContentStatus"
         AND project_search_document(
               p."title", p."summary", p."description", p."category", p."location"
@@ -57,7 +62,7 @@ export class SearchService {
     // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT n."id"
-      FROM "news_posts" n, plainto_tsquery('simple', ${q}) AS query
+      FROM "news_posts" n, plainto_tsquery('simple', immutable_unaccent(${q})) AS query
       WHERE n."status" = 'PUBLISHED'::"ContentStatus"
         AND news_search_document(n."title", n."summary", n."content", n."author") @@ query
       ORDER BY ts_rank(

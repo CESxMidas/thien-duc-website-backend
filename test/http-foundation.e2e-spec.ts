@@ -19,6 +19,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
 import {
   JSON_BODY_LIMIT,
   JSON_BODY_LIMIT_BYTES,
@@ -35,7 +36,9 @@ type ErrorEnvelope = {
   error: { code: string; message: unknown; details: unknown };
 };
 
-const SLUG = `e2e-foundation-${Date.now()}`;
+/** Không gian tên cố định của suite — dùng để dọn cả rác của lần chạy trước. */
+const SLUG_NAMESPACE = 'e2e-foundation-';
+const SLUG = `${SLUG_NAMESPACE}${Date.now()}`;
 
 describe('HTTP foundation e2e (PostgreSQL thật)', () => {
   // Kiểu NestExpressApplication (không phải INestApplication) để dùng
@@ -44,6 +47,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
   let http: App;
   let token: string;
   const createdSlugs: string[] = [];
+  let prisma: PrismaService;
 
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) {
@@ -85,7 +89,30 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
       .expect(201);
     token = (login.body as Envelope<{ accessToken: string }>).data.accessToken;
     expect(typeof token).toBe('string');
+    prisma = app.get(PrismaService);
+    // Dọn rác của những lần chạy TRƯỚC bị đứt giữa chừng (nếu có).
+    await purgeFixtures();
   });
+
+  /**
+   * Xoá THẲNG qua Prisma theo tiền tố slug, không đi qua `DELETE /api/news/:slug`.
+   *
+   * Cách cũ chỉ xoá những slug được `createdSlugs.push(...)` thủ công — mà vài
+   * case tạo bài rồi quên push (case slug quá dài, case trùng slug, case enum
+   * sai). Hậu quả: mỗi lần chạy để lại vài bài **PUBLISHED** trong
+   * `thien_duc_test`, và một trong số đó mang ảnh `res.cloudinary.com/demo/...`
+   * — host KHÔNG nằm trong `images.remotePatterns` của frontend — khiến trang
+   * công khai trả **500** và làm đỏ hàng loạt test Playwright chạy sau trên
+   * cùng CSDL. Lọc theo tiền tố nên không sót, kể cả bài chưa kịp đăng ký.
+   */
+  async function purgeFixtures(): Promise<void> {
+    if (!prisma) return;
+    // Lọc theo KHÔNG GIAN TÊN cố định, không theo timestamp của lần chạy này —
+    // nhờ vậy dọn được cả rác mà một lần chạy trước bị đứt để lại.
+    await prisma.newsPost.deleteMany({
+      where: { slug: { contains: SLUG_NAMESPACE } },
+    });
+  }
 
   afterAll(async () => {
     if (!app) return;
@@ -94,6 +121,8 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .delete(`/api/news/${slug}`)
         .set('Authorization', `Bearer ${token}`);
     }
+    // Lưới an toàn cuối: bắt mọi bài mà vòng lặp trên bỏ sót.
+    await purgeFixtures();
     await app.close();
   });
 

@@ -19,6 +19,21 @@ function firstCallArg<T>(mock: jest.Mock): T {
   return (mock.mock.calls as unknown as T[][])[0][0];
 }
 
+/**
+ * `expect.objectContaining` / `expect.anything` khai báo trả `any`. Đặt thẳng
+ * kết quả vào một field của object literal (`{ data: expect.objectContaining(…) }`)
+ * là gán `any` vào chỗ có kiểu → dính `no-unsafe-assignment`.
+ *
+ * Ba hàm bọc dưới đây trả `unknown`: matcher vẫn là chính nó lúc chạy (jest so
+ * khớp bằng ký hiệu asymmetric matcher trên object, không quan tâm kiểu tĩnh),
+ * mà `any` không rò tiếp vào phần còn lại của file. Không tắt luật, không cast.
+ */
+const objectContaining = (shape: Record<string, unknown>): unknown =>
+  expect.objectContaining(shape);
+const notObjectContaining = (shape: Record<string, unknown>): unknown =>
+  expect.not.objectContaining(shape);
+const anything = (): unknown => expect.anything();
+
 /** Lỗi Prisma khi email trùng (ràng buộc unique). */
 const uniqueViolation = Object.assign(new Error('Unique constraint'), {
   code: 'P2002',
@@ -210,7 +225,7 @@ describe('UsersService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
+          data: objectContaining({
             email: dto.email,
             name: dto.name,
             role: dto.role,
@@ -223,7 +238,7 @@ describe('UsersService', () => {
       // DTO không có field password — không có gì để rò vào data ngoài passwordHash placeholder.
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.not.objectContaining({ password: expect.anything() }),
+          data: notObjectContaining({ password: anything() }),
         }),
       );
       expect(result.user).toEqual(createdUser);
@@ -527,7 +542,7 @@ describe('UsersService', () => {
 
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ isActive: true }),
+          data: objectContaining({ isActive: true }),
         }),
       );
       // Mở khóa thì không cần thu hồi phiên.

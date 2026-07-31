@@ -10,9 +10,9 @@ jobs:
   lint-build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -51,8 +51,13 @@ jobs:
           POSTGRES_DB: thien_duc_test
         ports:
           - 5432:5432
+        # `-d thien_duc_test` là BẮT BUỘC: thiếu nó `pg_isready` mặc định thăm dò
+        # database trùng tên user (`thienduc_ci`) — database đó không tồn tại, nên
+        # cứ 5 giây Postgres lại ghi `FATAL: database "thienduc_ci" does not exist`
+        # vào log job. Container vẫn "healthy" (pg_isready coi cả phản hồi FATAL
+        # là server đã sống), chỉ là log đầy nhiễu và che mất lỗi DB thật.
         options: >-
-          --health-cmd "pg_isready -U thienduc_ci"
+          --health-cmd "pg_isready -U thienduc_ci -d thien_duc_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -82,9 +87,9 @@ jobs:
       SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD || 'CiTestPassword123!' }}
       ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'CiTestPassword123!' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

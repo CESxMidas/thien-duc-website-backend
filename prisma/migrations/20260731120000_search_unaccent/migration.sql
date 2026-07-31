@@ -15,13 +15,29 @@
 -- Tên dictionary được ghi rõ schema (`public.unaccent`) để không phụ thuộc
 -- `search_path` của phiên gọi.
 
--- 1) Bật extension. `IF NOT EXISTS` để migration chạy lại được (idempotent).
---    CẦN quyền tạo extension. Render Postgres cho phép các extension contrib
---    (unaccent nằm trong contrib) — xem ghi chú vận hành trong deployment docs.
-CREATE EXTENSION IF NOT EXISTS unaccent;
+-- ⚠️ BẮT BUỘC SCHEMA-QUALIFY MỌI LỜI GỌI HÀM Ở ĐÂY.
+-- Hàm `LANGUAGE sql` lưu thân dưới dạng VĂN BẢN; tên bên trong chỉ được phân
+-- giải lúc **inlining**, dùng `search_path` CỦA PHIÊN GỌI chứ không phải của
+-- lúc `CREATE FUNCTION`. Bản đầu của migration này gọi `immutable_unaccent(...)`
+-- không qualify, nên `CREATE INDEX` chỉ chạy được khi `search_path` tình cờ có
+-- schema chứa hàm bọc. CI (PostgreSQL 17) đổ đúng ở đó:
+--     P3018 / 42883  function immutable_unaccent(text) does not exist
+--     SQL function "project_search_document" during inlining
+-- Đã tái hiện được cơ chế cục bộ: cùng thân hàm, chỉ đổi `search_path` là lỗi
+-- hiện ra. Qualify đầy đủ thì `CREATE INDEX` chạy được với MỌI `search_path`,
+-- kể cả `search_path = ''` (đã đo).
+--
+-- Schema `public` suy ra từ chính cấu hình Prisma: `schema.prisma` không bật
+-- multiSchema, không có `@@schema`, và CI đặt `?schema=public`.
 
--- 2) Hàm bọc IMMUTABLE để dùng được trong biểu thức index.
-CREATE OR REPLACE FUNCTION immutable_unaccent(input TEXT)
+-- 1) Bật extension, ghim vào schema `public` để mọi tham chiếu
+--    `public.unaccent` bên dưới luôn đúng. `IF NOT EXISTS` cho phép chạy lại.
+--    CẦN quyền tạo extension (unaccent nằm trong contrib).
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+
+-- 2) Hàm bọc IMMUTABLE để dùng được trong biểu thức index. Tạo TRƯỚC mọi hàm
+--    phụ thuộc, và đặt tên có schema tường minh.
+CREATE OR REPLACE FUNCTION public.immutable_unaccent(input TEXT)
 RETURNS TEXT
 LANGUAGE sql
 IMMUTABLE
@@ -38,7 +54,7 @@ DROP INDEX IF EXISTS "projects_search_idx";
 DROP INDEX IF EXISTS "news_posts_search_idx";
 
 -- 4) Dựng lại hai hàm, bọc `immutable_unaccent` quanh chuỗi đã ghép.
-CREATE OR REPLACE FUNCTION project_search_document(
+CREATE OR REPLACE FUNCTION public.project_search_document(
   title JSONB,
   summary JSONB,
   description JSONB,
@@ -51,7 +67,7 @@ PARALLEL SAFE
 AS $$
   SELECT to_tsvector(
     'simple',
-    immutable_unaccent(
+    public.immutable_unaccent(
       coalesce(title ->> 'vi', '') || ' ' || coalesce(title ->> 'en', '') || ' ' ||
       coalesce(summary ->> 'vi', '') || ' ' || coalesce(summary ->> 'en', '') || ' ' ||
       coalesce(description ->> 'vi', '') || ' ' || coalesce(description ->> 'en', '') || ' ' ||
@@ -61,7 +77,7 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION news_search_document(
+CREATE OR REPLACE FUNCTION public.news_search_document(
   title JSONB,
   summary JSONB,
   content JSONB,
@@ -73,7 +89,7 @@ PARALLEL SAFE
 AS $$
   SELECT to_tsvector(
     'simple',
-    immutable_unaccent(
+    public.immutable_unaccent(
       coalesce(title ->> 'vi', '') || ' ' || coalesce(title ->> 'en', '') || ' ' ||
       coalesce(summary ->> 'vi', '') || ' ' || coalesce(summary ->> 'en', '') || ' ' ||
       coalesce(content::text, '') || ' ' ||
@@ -82,11 +98,14 @@ AS $$
   );
 $$;
 
--- 5) Dựng lại index GIN theo biểu thức MỚI.
+-- 5) Dựng lại index GIN theo biểu thức MỚI. Qualify luôn tên hàm ngoài: tên
+--    trong CÂU LỆNH được phân giải lúc parse (search_path bình thường) nên vốn
+--    vẫn chạy, nhưng qualify hết thì không còn phụ thuộc `search_path` ở bất kỳ
+--    tầng nào — đó chính là thứ đã làm CI đỏ.
 CREATE INDEX IF NOT EXISTS "projects_search_idx"
   ON "projects"
-  USING GIN (project_search_document("title", "summary", "description", "category", "location"));
+  USING GIN (public.project_search_document("title", "summary", "description", "category", "location"));
 
 CREATE INDEX IF NOT EXISTS "news_posts_search_idx"
   ON "news_posts"
-  USING GIN (news_search_document("title", "summary", "content", "author"));
+  USING GIN (public.news_search_document("title", "summary", "content", "author"));

@@ -19,6 +19,27 @@ function firstCallArg<T>(mock: jest.Mock): T {
   return (mock.mock.calls as unknown as T[][])[0][0];
 }
 
+/*
+ * Bọc matcher bất đối xứng của Jest để trả `unknown` thay vì `any`.
+ *
+ * `expect.objectContaining()` và `expect.anything()` khai báo trả `any`. Đặt
+ * thẳng giá trị đó làm field của một object literal là `no-unsafe-assignment`:
+ * cả nhánh object đó mất kiểm tra kiểu, nên một field viết sai chính tả sẽ
+ * không ai phát hiện. Trả `unknown` giữ nguyên HÀNH VI LÚC CHẠY (vẫn đúng
+ * object matcher đó) mà không để `any` lan ra.
+ */
+function objectContaining(shape: Record<string, unknown>): unknown {
+  return expect.objectContaining(shape);
+}
+
+function notObjectContaining(shape: Record<string, unknown>): unknown {
+  return expect.not.objectContaining(shape);
+}
+
+function anything(): unknown {
+  return expect.anything();
+}
+
 /** Lỗi Prisma khi email trùng (ràng buộc unique). */
 const uniqueViolation = Object.assign(new Error('Unique constraint'), {
   code: 'P2002',
@@ -210,7 +231,7 @@ describe('UsersService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
+          data: objectContaining({
             email: dto.email,
             name: dto.name,
             role: dto.role,
@@ -223,7 +244,7 @@ describe('UsersService', () => {
       // DTO không có field password — không có gì để rò vào data ngoài passwordHash placeholder.
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.not.objectContaining({ password: expect.anything() }),
+          data: notObjectContaining({ password: anything() }),
         }),
       );
       expect(result.user).toEqual(createdUser);
@@ -527,7 +548,7 @@ describe('UsersService', () => {
 
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ isActive: true }),
+          data: objectContaining({ isActive: true }),
         }),
       );
       // Mở khóa thì không cần thu hồi phiên.

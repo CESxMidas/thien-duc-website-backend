@@ -15,21 +15,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-FILE=""; KEEP=0
+FILE=""; KEEP=0; TARGET_EXPLICIT=0
 TARGET_URL="${VERIFY_DATABASE_URL:-postgresql://127.0.0.1:5432/thien_duc_verify}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --file)   FILE="${2:?--file cần giá trị}"; shift 2 ;;
-    --target) TARGET_URL="${2:?--target cần giá trị}"; shift 2 ;;
+    --target) TARGET_URL="${2:?--target cần giá trị}"; TARGET_EXPLICIT=1; shift 2 ;;
     --keep)   KEEP=1; shift ;;
     -h|--help) sed -n '2,16p' "$0"; exit $EXIT_OK ;;
     *) fail $EXIT_USAGE "tham số lạ: $1" ;;
   esac
 done
 
+# THỨ TỰ QUAN TRỌNG: tham số → checksum → CẦU CHÌ ĐÍCH → rồi mới kiểm công cụ.
+# Kiểm công cụ trước sẽ khiến máy thiếu pg_restore trả mã 4 ("thiếu lệnh") cho
+# cả những lời gọi trỏ vào production — che mất mã 3 ("đích không an toàn") và
+# làm cầu chì không thể kiểm chứng được nếu không cài PostgreSQL. Cầu chì phải
+# nổ trước, ở mọi máy.
 [[ -n "$FILE" ]] || fail $EXIT_USAGE "thiếu --file."
 [[ -f "$FILE" ]] || fail $EXIT_USAGE "không thấy file: $FILE"
-need_tool pg_restore; need_tool psql; need_tool createdb; need_tool dropdb
 
 # 1) Checksum trước đã — file hỏng thì khỏi restore.
 if [[ -f "${FILE}.sha256" ]]; then
@@ -42,8 +46,18 @@ else
 fi
 
 # 2) Cầu chì đích.
+# Tên DB DUY NHẤT mỗi lần chạy trừ khi người dùng chỉ định --target rõ ràng:
+# hai lần chạy song song dùng chung một tên sẽ giẫm lên nhau (lần sau dropdb
+# mất DB lần trước đang restore dở). Vẫn giữ đuôi `_verify` để cầu chì chặn được.
+if [[ $TARGET_EXPLICIT -eq 0 ]]; then
+  parse_database_url "$TARGET_URL"
+  TARGET_URL="$(replace_db_name_in_url "$TARGET_URL" "$(unique_disposable_db_name thien_duc)")"
+fi
 assert_disposable_target "$TARGET_URL"
 log "đích phục hồi (dùng-một-lần): host=$DB_HOST port=$DB_PORT database=$DB_NAME"
+
+# Qua hết cầu chì rồi mới cần tới công cụ PostgreSQL.
+need_tool pg_restore; need_tool psql; need_tool createdb; need_tool dropdb
 
 ADMIN_URL="${TARGET_URL%/*}/postgres"
 cleanup() { [[ $KEEP -eq 0 ]] && dropdb --if-exists --maintenance-db="$ADMIN_URL" "$DB_NAME" >/dev/null 2>&1 || true; }

@@ -10,9 +10,9 @@ jobs:
   lint-build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -52,7 +52,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U thienduc_ci"
+          --health-cmd "pg_isready -U thienduc_ci -d thien_duc_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -82,9 +82,9 @@ jobs:
       SUPER_ADMIN_PASSWORD: ${{ secrets.E2E_SUPER_ADMIN_PASSWORD || 'CiTestPassword123!' }}
       ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || 'CiTestPassword123!' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

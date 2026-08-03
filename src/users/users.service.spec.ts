@@ -19,22 +19,6 @@ function firstCallArg<T>(mock: jest.Mock): T {
   return (mock.mock.calls as unknown as T[][])[0][0];
 }
 
-<<<<<<< HEAD
-/**
- * `expect.objectContaining` / `expect.anything` khai báo trả `any`. Đặt thẳng
- * kết quả vào một field của object literal (`{ data: expect.objectContaining(…) }`)
- * là gán `any` vào chỗ có kiểu → dính `no-unsafe-assignment`.
- *
- * Ba hàm bọc dưới đây trả `unknown`: matcher vẫn là chính nó lúc chạy (jest so
- * khớp bằng ký hiệu asymmetric matcher trên object, không quan tâm kiểu tĩnh),
- * mà `any` không rò tiếp vào phần còn lại của file. Không tắt luật, không cast.
- */
-const objectContaining = (shape: Record<string, unknown>): unknown =>
-  expect.objectContaining(shape);
-const notObjectContaining = (shape: Record<string, unknown>): unknown =>
-  expect.not.objectContaining(shape);
-const anything = (): unknown => expect.anything();
-=======
 /*
  * Bọc matcher bất đối xứng của Jest để trả `unknown` thay vì `any`.
  *
@@ -55,7 +39,6 @@ function notObjectContaining(shape: Record<string, unknown>): unknown {
 function anything(): unknown {
   return expect.anything();
 }
->>>>>>> 152b4c889a82d2cd19f50514d93a7abb8c125311
 
 /** Lỗi Prisma khi email trùng (ràng buộc unique). */
 const uniqueViolation = Object.assign(new Error('Unique constraint'), {

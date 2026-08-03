@@ -36,19 +36,6 @@ const DELIVERY_TRANSFORMATION: UploadApiOptions['transformation'] = [
   { fetch_format: 'webp' },
 ];
 
-/**
- * Đọc field `result` của phản hồi `uploader.destroy` mà không tin vào kiểu `any`
- * của SDK. Không phải object, thiếu field, hoặc field không phải chuỗi →
- * `undefined` (người gọi coi là thất bại).
- */
-function destroyStatusOf(raw: unknown): string | undefined {
-  if (typeof raw !== 'object' || raw === null || !('result' in raw)) {
-    return undefined;
-  }
-  const { result } = raw;
-  return typeof result === 'string' ? result : undefined;
-}
-
 @Injectable()
 export class CloudinaryService implements OnModuleInit {
   private readonly logger = new Logger(CloudinaryService.name);
@@ -121,21 +108,6 @@ export class CloudinaryService implements OnModuleInit {
    * trả `not found` mà không báo lỗi, ảnh vẫn nằm lại và tiếp tục ăn quota.
    */
   async destroyImage(publicId: string): Promise<void> {
-<<<<<<< HEAD
-    // `cloudinary.uploader.destroy` khai báo trả `any`. Nhận vào `unknown` rồi
-    // thu hẹp bằng type guard thật, thay vì tin lời khai kiểu của SDK: nếu
-    // Cloudinary đổi shape phản hồi, ta rơi vào nhánh "không đọc được" và ném
-    // lỗi, chứ không âm thầm so sánh `undefined !== 'ok'`.
-    const raw: unknown = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'image',
-      invalidate: true,
-    });
-    const status = destroyStatusOf(raw);
-    if (status !== 'ok' && status !== 'not found') {
-      throw new Error(
-        `Cloudinary destroy thất bại: ${status ?? 'phản hồi lạ'}`,
-      );
-=======
     // `cloudinary.uploader.destroy()` khai báo trả `any`. Nhận vào `unknown`
     // rồi thu hẹp bằng type guard THẬT: shape lạ sẽ ném lỗi rõ ràng thay vì
     // âm thầm so `undefined !== 'ok'` (bản cũ coi mọi phản hồi không đọc được
@@ -153,7 +125,6 @@ export class CloudinaryService implements OnModuleInit {
     }
     if (status !== 'ok' && status !== 'not found') {
       throw new Error(`Cloudinary destroy thất bại: ${status}`);
->>>>>>> 152b4c889a82d2cd19f50514d93a7abb8c125311
     }
   }
 }

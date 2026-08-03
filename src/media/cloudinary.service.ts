@@ -12,6 +12,23 @@ import type { MulterFile } from './types';
  * website này nên không cần thêm một cấp thư mục gốc mang tên công ty. */
 export const DEFAULT_FOLDER = 'misc';
 
+/**
+ * Đọc field `result` của phản hồi `uploader.destroy()` một cách an toàn.
+ *
+ * SDK Cloudinary khai báo `destroy()` trả `any`, nên nếu gán thẳng vào một kiểu
+ * tự đặt thì TypeScript không kiểm gì cả — mọi thay đổi shape phía SDK sẽ trôi
+ * qua im lặng. Hàm này thu hẹp từ `unknown`: trả chuỗi khi phản hồi đúng dạng,
+ * `undefined` khi KHÔNG đọc được (để nơi gọi phân biệt "thất bại có lý do" với
+ * "không hiểu phản hồi").
+ */
+export function destroyStatusOf(response: unknown): string | undefined {
+  if (typeof response !== 'object' || response === null) return undefined;
+  if (!('result' in response)) return undefined;
+  // `in` đã thu hẹp `response` nên `result` có kiểu `unknown` — không cần assert.
+  const { result } = response;
+  return typeof result === 'string' ? result : undefined;
+}
+
 /** Ảnh xuất bản web: ≤ 1200px cạnh dài, WebP, chất lượng tự động (ED-05, mục 2.1.4). */
 const DELIVERY_TRANSFORMATION: UploadApiOptions['transformation'] = [
   { width: 1200, height: 1200, crop: 'limit' },
@@ -104,6 +121,7 @@ export class CloudinaryService implements OnModuleInit {
    * trả `not found` mà không báo lỗi, ảnh vẫn nằm lại và tiếp tục ăn quota.
    */
   async destroyImage(publicId: string): Promise<void> {
+<<<<<<< HEAD
     // `cloudinary.uploader.destroy` khai báo trả `any`. Nhận vào `unknown` rồi
     // thu hẹp bằng type guard thật, thay vì tin lời khai kiểu của SDK: nếu
     // Cloudinary đổi shape phản hồi, ta rơi vào nhánh "không đọc được" và ném
@@ -117,6 +135,25 @@ export class CloudinaryService implements OnModuleInit {
       throw new Error(
         `Cloudinary destroy thất bại: ${status ?? 'phản hồi lạ'}`,
       );
+=======
+    // `cloudinary.uploader.destroy()` khai báo trả `any`. Nhận vào `unknown`
+    // rồi thu hẹp bằng type guard THẬT: shape lạ sẽ ném lỗi rõ ràng thay vì
+    // âm thầm so `undefined !== 'ok'` (bản cũ coi mọi phản hồi không đọc được
+    // là thất bại kèm thông báo `undefined`, không truy được nguyên nhân).
+    const response: unknown = await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'image',
+      invalidate: true,
+    });
+
+    const status = destroyStatusOf(response);
+    if (status === undefined) {
+      throw new Error(
+        `Cloudinary destroy trả phản hồi không đọc được: ${JSON.stringify(response)}`,
+      );
+    }
+    if (status !== 'ok' && status !== 'not found') {
+      throw new Error(`Cloudinary destroy thất bại: ${status}`);
+>>>>>>> 152b4c889a82d2cd19f50514d93a7abb8c125311
     }
   }
 }

@@ -30,7 +30,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-need_tool pg_dump
+# THỨ TỰ QUAN TRỌNG: xác thực tham số/biến TRƯỚC, kiểm công cụ SAU.
+# Ngược lại thì trên máy thiếu pg_dump, lỗi "thiếu lệnh" (mã 4) che mất lỗi
+# "thiếu DATABASE_URL" (mã 2) — scheduler báo sai loại sự cố, và cầu chì an
+# toàn không bao giờ được kiểm chứng. Lỗi cấu hình phải hiện ra đúng tên của nó.
 parse_database_url "${DATABASE_URL:-}"
 log "nguồn: host=$DB_HOST port=$DB_PORT database=$DB_NAME"   # KHÔNG in URL đầy đủ
 
@@ -50,6 +53,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   trap - EXIT; rm -f "$TMP"; exit $EXIT_OK
 fi
 
+need_tool pg_dump
 log "đang dump..."
 # -Fc: custom (nén + pg_restore chọn lọc được). -Z6: mức nén cân bằng.
 # --no-owner/--no-privileges: khôi phục được sang cluster có role khác.
@@ -86,11 +90,24 @@ else
 fi
 
 # --- Đẩy lên kho ngoài (adapter) -------------------------------------------
+# Đường đi MẶC ĐỊNH và được khuyến nghị: adapter trung lập nhà cung cấp qua
+# BACKUP_UPLOAD_COMMAND (xem lib.sh). Dự án CHƯA chọn nhà cung cấp nào, nên
+# không ràng buộc sẵn vào AWS/B2/GCS/R2.
+#
+# `BACKUP_DEST` (s3|b2|gcs) là đường CŨ, giữ lại cho ai đã cấu hình theo nó.
 DEST="${BACKUP_DEST:-none}"
+
 if [[ "$DEST" == "none" ]]; then
-  log "BACKUP_DEST=none — giữ cục bộ, không upload."
+  # Trung lập: không đặt BACKUP_UPLOAD_COMMAND thì hàm tự log rồi trả 0.
+  run_upload_adapter "$TARGET" \
+    || fail $EXIT_UPLOAD_FAILED "upload file backup thất bại."
+  if [[ -n "${BACKUP_UPLOAD_COMMAND:-}" ]]; then
+    run_upload_adapter "${TARGET}.sha256" \
+      || fail $EXIT_UPLOAD_FAILED "upload file checksum thất bại."
+  fi
   exit $EXIT_OK
 fi
+
 [[ -n "${BACKUP_DEST_URI:-}" ]] || fail $EXIT_USAGE "BACKUP_DEST=$DEST nhưng thiếu BACKUP_DEST_URI."
 
 upload() {
@@ -98,9 +115,14 @@ upload() {
     s3)  need_tool aws;    aws s3 cp "$1" "${BACKUP_DEST_URI%/}/$(basename "$1")" ;;
     b2)  need_tool b2;     b2 file upload "${BACKUP_DEST_URI}" "$1" "$(basename "$1")" ;;
     gcs) need_tool gcloud; gcloud storage cp "$1" "${BACKUP_DEST_URI%/}/$(basename "$1")" ;;
-    *)   fail $EXIT_USAGE "adapter không hỗ trợ: $DEST (dùng none|s3|b2|gcs)" ;;
+    *)   fail $EXIT_USAGE "adapter không hỗ trợ: $DEST (dùng none|s3|b2|gcs, hoặc BACKUP_UPLOAD_COMMAND)" ;;
   esac
 }
+
+if [[ "${BACKUP_UPLOAD_DRY_RUN:-0}" == "1" ]]; then
+  log "DRY-RUN: sẽ upload $(basename "$TARGET") + .sha256 qua adapter '$DEST'."
+  exit $EXIT_OK
+fi
 
 log "đang upload qua adapter '$DEST'..."
 upload "$TARGET"          || fail $EXIT_UPLOAD_FAILED "upload file backup thất bại."

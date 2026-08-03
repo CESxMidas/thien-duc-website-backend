@@ -49,7 +49,46 @@ jobs:
 **Lưu ý phiên bản**: client `pg_dump` phải **bằng hoặc mới hơn** server
 (production là PostgreSQL 17), nếu không `pg_dump` từ chối chạy.
 
-## 3. Scheduler ngoài (Render Cron Job / hosted scheduler)
+## 2b. Biến trung lập nhà cung cấp (khuyến nghị cho cấu hình mới)
+
+Mẫu §2 dùng `BACKUP_DEST: s3` — đường **cũ**, ràng vào AWS. Cấu hình mới nên
+dùng adapter trung lập, không cam kết nhà cung cấp nào:
+
+```yaml
+        env:
+          DATABASE_URL:          ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_UPLOAD_COMMAND: ${{ vars.BACKUP_UPLOAD_COMMAND }}   # vd: 'rclone copyto {file} {remote}'
+          BACKUP_REMOTE_PREFIX:  ${{ vars.BACKUP_REMOTE_PREFIX }}
+          BACKUP_ENCRYPT_KEY:    ${{ secrets.BACKUP_ENCRYPT_KEY }}
+```
+
+Diễn tập trước khi bật thật: đặt `BACKUP_UPLOAD_DRY_RUN=1` — script in ra đúng
+lệnh sẽ chạy rồi dừng, **không** gửi gì đi.
+
+## 3. Windows — Task Scheduler + wrapper PowerShell
+
+Máy vận hành của dự án là Windows, nên có sẵn wrapper:
+[`scheduler-windows.ps1`](scheduler-windows.ps1).
+
+```powershell
+# Chạy tay một lần để kiểm tra (diễn tập, không upload):
+powershell -ExecutionPolicy Bypass -File .\scripts\backup\scheduler-windows.ps1 -DryRun
+
+# Đăng ký chạy 02:15 mỗi ngày (chạy trong PowerShell có quyền Administrator):
+$action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
+  -Argument '-ExecutionPolicy Bypass -File "C:\srv\thien-duc\backend\scripts\backup\scheduler-windows.ps1"'
+$trigger = New-ScheduledTaskTrigger -Daily -At 2:15am
+Register-ScheduledTask -TaskName 'ThienDuc-Backup' -Action $action -Trigger $trigger `
+  -Description 'Backup PostgreSQL Thiên Đức (xem scripts/backup/)'
+```
+
+Wrapper cần **Git Bash** (`bash.exe`) vì bộ script viết bằng bash — đây là môi
+trường được hỗ trợ, xem §"Yêu cầu môi trường" trong `backup-and-restore.md`.
+
+**Xoay vòng log trên Windows**: Task Scheduler không tự xoay log. Wrapper tự ghi
+ra `logs/backup-YYYYMMDD.log` và tự xoá log cũ hơn `-LogKeepDays` (mặc định 30).
+
+## 4. Scheduler ngoài (Render Cron Job / hosted scheduler)
 
 Cùng một lệnh như cron ở §1. Ưu điểm: chạy gần DB nên nhanh và không lộ DB ra
 Internet. Nhược điểm: tốn thêm một service trả phí.

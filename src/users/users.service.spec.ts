@@ -19,6 +19,7 @@ function firstCallArg<T>(mock: jest.Mock): T {
   return (mock.mock.calls as unknown as T[][])[0][0];
 }
 
+<<<<<<< HEAD
 /**
  * `expect.objectContaining` / `expect.anything` khai báo trả `any`. Đặt thẳng
  * kết quả vào một field của object literal (`{ data: expect.objectContaining(…) }`)
@@ -33,6 +34,28 @@ const objectContaining = (shape: Record<string, unknown>): unknown =>
 const notObjectContaining = (shape: Record<string, unknown>): unknown =>
   expect.not.objectContaining(shape);
 const anything = (): unknown => expect.anything();
+=======
+/*
+ * Bọc matcher bất đối xứng của Jest để trả `unknown` thay vì `any`.
+ *
+ * `expect.objectContaining()` và `expect.anything()` khai báo trả `any`. Đặt
+ * thẳng giá trị đó làm field của một object literal là `no-unsafe-assignment`:
+ * cả nhánh object đó mất kiểm tra kiểu, nên một field viết sai chính tả sẽ
+ * không ai phát hiện. Trả `unknown` giữ nguyên HÀNH VI LÚC CHẠY (vẫn đúng
+ * object matcher đó) mà không để `any` lan ra.
+ */
+function objectContaining(shape: Record<string, unknown>): unknown {
+  return expect.objectContaining(shape);
+}
+
+function notObjectContaining(shape: Record<string, unknown>): unknown {
+  return expect.not.objectContaining(shape);
+}
+
+function anything(): unknown {
+  return expect.anything();
+}
+>>>>>>> 152b4c889a82d2cd19f50514d93a7abb8c125311
 
 /** Lỗi Prisma khi email trùng (ràng buộc unique). */
 const uniqueViolation = Object.assign(new Error('Unique constraint'), {

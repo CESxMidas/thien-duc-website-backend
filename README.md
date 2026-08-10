@@ -48,7 +48,7 @@ Postgres local chạy bằng Docker ở **port 5433** (`docker compose up -d`) v
 
 - SMTP thật cho thông báo form liên hệ — câu 9. (`contact.service.ts` còn TODO
   gửi mail; phần lưu DB + rate-limit 5 req/IP/giờ đã chạy.)
-- ~~Cloudinary~~ **đã xong** (câu 12): cloud name `thienduc`, `POST /media/upload`
+- ~~Cloudinary~~ **đã xong** (câu 12): cloud name `ksnntvmu`, `POST /media/upload`
   ép WebP + giới hạn 1200px, `DELETE /media/:id` xóa trên cloud trước.
 - ~~Hosting/DB~~ **đã chốt** (câu 11): Render (BE + Postgres) + Vercel (FE).
 

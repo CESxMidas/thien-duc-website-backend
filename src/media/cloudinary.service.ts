@@ -8,7 +8,7 @@ import {
 import { Readable } from 'node:stream';
 import type { MulterFile } from './types';
 
-/** Thư mục mặc định khi client không chỉ định. Cloud `thienduc` chỉ phục vụ
+/** Thư mục mặc định khi client không chỉ định. Cloud `ksnntvmu` chỉ phục vụ
  * website này nên không cần thêm một cấp thư mục gốc mang tên công ty. */
 export const DEFAULT_FOLDER = 'misc';
 

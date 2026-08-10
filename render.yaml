@@ -43,27 +43,36 @@ services:
         generateValue: true # Render tự sinh chuỗi ngẫu nhiên an toàn.
       - key: JWT_ACCESS_EXPIRES_IN
         value: 15m
-      # Đổi thành domain Vercel thật sau khi có (nhiều origin cách nhau bằng dấu phẩy).
+      # BẮT BUỘC — backend NÉM LỖI KHỞI ĐỘNG nếu thiếu (cố ý không fallback wildcard).
+      # `sync: false` để Render HỎI giá trị lúc Apply Blueprint, thay vì mang theo
+      # URL của tài khoản Vercel CŨ (giá trị cũ vẫn boot được nhưng CHẶN ÂM THẦM
+      # frontend mới — lỗi rất khó thấy).
+      # Thứ tự: lúc Apply chưa có URL Vercel → điền tạm origin https bất kỳ để backend
+      # boot, deploy frontend/admin xong thì quay lại sửa đúng và redeploy.
+      # Nhiều origin cách nhau bằng dấu phẩy, KHÔNG khoảng trắng, không wildcard.
       - key: CORS_ORIGIN
-        value: https://thien-duc-website-frontend.vercel.app
-      # Cloudinary / SMTP để trống tới khi công ty cung cấp (câu 9, 12 trong docs).
-      - key: CLOUDINARY_CLOUD_NAME
         sync: false
+      # Cloudinary để trống tới khi công ty cung cấp (câu 9, 12 trong docs).
+      # ⚠️ CLOUDINARY_CLOUD_NAME phải KHỚP allowlist ảnh của frontend
+      # (frontend/next.config.ts → images.remotePatterns → pathname "/<cloud>/**"),
+      # sai cloud thì next/image trả 400 và ảnh không hiện trên web công khai.
+      # Cloud name là giá trị CÔNG KHAI (nằm trong URL ảnh) và đã được xác nhận
+      # 2026-08-10. Đặt thẳng value để KHÔNG lệch với allowlist của frontend.
+      - key: CLOUDINARY_CLOUD_NAME
+        value: ksnntvmu
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: SMTP_HOST
+      # Email chạy Resend-only (SMTP fallback đã gỡ khỏi code — xem
+      # docs/08-audits-and-reports/current/2026-07-20-smtp-removal-env-cleanup.md).
+      # Thiếu bất kỳ biến nào → bỏ qua gửi mail, lead VẪN được lưu.
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USER
+      # Địa chỉ gửi — phải thuộc domain đã verify ở Resend.
+      - key: MAIL_FROM
         sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
-        value: dautuxaydungthienduc@yahoo.com
-      # Nơi nhận email báo lead mới. Bỏ trống → gửi về chính SMTP_FROM.
+      # Nơi nhận email báo lead mới.
       - key: CONTACT_NOTIFY_TO
         sync: false
       # Sentry DSN (project backend riêng) — nhập tay ở Dashboard. Thiếu = tắt

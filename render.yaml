@@ -6,25 +6,31 @@ databases:
   - name: thien-duc-db
     databaseName: thien_duc
     user: thienduc
-    # Plan Postgres trả phí rẻ nhất có lưu trữ bền + backup được quản lý. Free tier
-    # hết hạn 90 ngày và KHÔNG có backup (task →2). `basic-256mb` là tên plan tại
-    # thời điểm viết — PHẢI kiểm tra lại tên/giá/retention/PITR ở Render Dashboard
-    # khi nâng (Render đổi tên plan theo thời gian). Xem docs/07-deployment/backup-and-restore.md.
+    # ⚠️ FREE — CHỈ để deploy/kiểm thử ban đầu, KHÔNG dùng cho dữ liệu production thật:
+    #   • 1 GB lưu trữ · mỗi workspace chỉ được MỘT Postgres Free
+    #   • HẾT HẠN sau 30 ngày → dữ liệu mất, phải tạo lại
+    #   • KHÔNG có backup, không PITR
+    # Trước go-live phải nâng lên plan trả phí (vd. `basic-256mb` — kiểm tra lại
+    # tên/giá/retention/PITR ở Render Dashboard vì Render đổi tên plan theo thời gian).
     # LƯU Ý: đổi dòng này KHÔNG tự thanh toán; free→paid có thể phải tạo instance
     # Postgres mới + migrate dữ liệu (pg_dump/pg_restore) nếu Render không cho nâng
-    # tại chỗ — xem "Đường di trú" trong backup-and-restore.md.
-    plan: basic-256mb
+    # tại chỗ — xem "Đường di trú" trong docs/07-deployment/backup-and-restore.md.
+    plan: free
     region: singapore # PHẢI cùng region với web service, nếu không hostname nội bộ không kết nối được (P1001).
 
 services:
   - type: web
     name: thien-duc-website-backend
     runtime: node
-    # Web service trả phí always-on (không ngủ) — bỏ cold start ~30–50s làm timeout
-    # form liên hệ và làm cron đăng bài chạy đáng tin (task →2). `starter` là tên
-    # plan tại thời điểm viết — kiểm tra lại tên/giá ở Render Dashboard khi nâng.
-    # Đổi dòng này KHÔNG tự thanh toán; cần xác nhận + gắn thẻ ở Dashboard.
-    plan: starter
+    # ⚠️ FREE — CHỈ để deploy/kiểm thử ban đầu, KHÔNG phải hạ tầng production:
+    #   • NGỦ sau ~15 phút không có traffic; request đánh thức mất ~1 phút
+    #     → form liên hệ có thể timeout, cron đăng bài (@Cron) KHÔNG chạy đáng tin
+    #   • 750 giờ instance miễn phí / workspace / tháng · không có disk bền
+    # Hệ quả cho deploy: backend ngủ lúc Vercel build sẽ làm frontend build ĐỎ ở
+    # /sitemap.xml → đánh thức `…/api` ngay trước khi build frontend.
+    # Trước go-live phải nâng lên plan always-on (vd. `starter` — kiểm tra lại
+    # tên/giá ở Render Dashboard). Đổi dòng này KHÔNG tự thanh toán.
+    plan: free
     region: singapore # gần Việt Nam nhất.
     branch: main
     buildCommand: npm ci && npm run build

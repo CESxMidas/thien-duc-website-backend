@@ -259,6 +259,14 @@ model NewsPost {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
+  // Danh sách tin công khai lọc theo chuyên mục:
+  //   WHERE category_id = ? AND status = 'PUBLISHED'
+  //   ORDER BY published_at DESC, id DESC
+  // Thứ tự cột theo đúng thứ tự dùng: hai cột lọc bằng (=) trước, cột sắp xếp
+  // sau — có vậy Postgres mới vừa lọc vừa lấy sẵn thứ tự từ index, không phải
+  // sort lại. Index tăng dần vẫn phục vụ ORDER BY DESC (quét ngược).
+  // Không có index này, mỗi lần mở một chuyên mục là một lượt quét toàn bảng.
+  @@index([categoryId, status, publishedAt], map: "news_posts_category_status_published_idx")
   @@map("news_posts")
 }
 

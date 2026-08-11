@@ -111,15 +111,22 @@ export class NewsController {
   @ApiOperation({
     summary:
       'Bài đã đăng. Có `page`/`limit` → envelope phân trang; không có → mảng phẳng (giữ tương thích).',
+    description:
+      'Thêm `categorySlug` để lọc theo chuyên mục. Slug hợp lệ nhưng không có bài nào trả về trang rỗng, không phải lỗi.',
   })
   @Get()
   findAll(@Query() query: QueryNewsDto) {
+    // `categorySlug` một mình KHÔNG bật nhánh phân trang: nhánh mảng phẳng là
+    // hợp đồng tương thích ngược cho sitemap và `generateStaticParams`, đổi
+    // hình dạng response ở đó sẽ phá các consumer đang chạy. Lọc chuyên mục là
+    // tính năng của danh sách có phân trang.
     if (query.page === undefined && query.limit === undefined) {
       return this.newsService.findAll(true);
     }
     return this.newsService.findAllPaginated(
       query.page ?? 1,
       query.limit ?? NEWS_DEFAULT_PAGE_SIZE,
+      query.categorySlug,
     );
   }
 

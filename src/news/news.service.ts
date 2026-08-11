@@ -38,8 +38,15 @@ export class NewsService {
    * trang luôn thuộc cùng một ảnh chụp dữ liệu — nếu không, một bài được đăng
    * xen giữa hai truy vấn sẽ làm `totalPages` lệch với thứ tự trang đang trả.
    */
-  async findAllPaginated(page: number, limit: number) {
-    const where = { status: ContentStatus.PUBLISHED };
+  async findAllPaginated(page: number, limit: number, categorySlug?: string) {
+    // Slug chuyên mục không tồn tại KHÔNG phải lỗi: `category: { slug }` chỉ
+    // đơn giản không khớp bài nào → trang rỗng, `totalPages = 0`. Frontend tự
+    // quyết định hiện trạng thái trống hay `notFound()`; ném 500 ở đây thì một
+    // URL cũ bị đổi slug sẽ làm sập trang thay vì hiện danh sách rỗng.
+    const where: Prisma.NewsPostWhereInput = {
+      status: ContentStatus.PUBLISHED,
+      ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+    };
 
     const [totalItems, items] = await this.prisma.$transaction([
       this.prisma.newsPost.count({ where }),

@@ -1,6 +1,25 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+
+/**
+ * Slug chuyên mục hợp lệ: chữ thường ASCII, số và dấu gạch ngang; không mở đầu
+ * hay kết thúc bằng gạch ngang, không có hai gạch liền.
+ *
+ * Chặn ngay ở tầng DTO thay vì tin vào Prisma: giá trị này đi thẳng vào mệnh đề
+ * `where` của một route **công khai, không đăng nhập**. Prisma vốn đã tham số
+ * hóa nên không có SQL injection, nhưng ràng buộc hình dạng giữ cho URL chuyên
+ * mục là một tập hữu hạn, đếm được — đúng điều kiện SEO của trang danh mục.
+ */
+export const NEWS_CATEGORY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Số bài mỗi trang khi client gửi `page` mà không gửi `limit`. */
 export const NEWS_DEFAULT_PAGE_SIZE = 9;
@@ -43,4 +62,24 @@ export class QueryNewsDto {
   @Min(1)
   @Max(NEWS_MAX_PAGE_SIZE)
   limit?: number;
+
+  /**
+   * Lọc theo slug chuyên mục. Bỏ trống → giữ nguyên hành vi cũ (mọi chuyên mục).
+   *
+   * PHẢI khai báo ở đây: `ValidationPipe` bật `forbidNonWhitelisted`, nên field
+   * không có trong DTO bị **từ chối 400** chứ không phải bị bỏ qua.
+   */
+  @ApiPropertyOptional({
+    example: 'tin-du-an',
+    maxLength: 160,
+    description:
+      'Slug chuyên mục cần lọc. Chỉ có tác dụng cùng `page`/`limit` (nhánh phân trang).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  @Matches(NEWS_CATEGORY_SLUG_PATTERN, {
+    message: 'categorySlug chỉ gồm chữ thường, số và dấu gạch ngang',
+  })
+  categorySlug?: string;
 }

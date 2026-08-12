@@ -10,6 +10,7 @@ import {
   assertContentStatusTransition,
   initialContentStatus,
 } from '../common/content-approval';
+import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
@@ -176,10 +177,67 @@ export class NewsService {
 
   // ----- Chuyên mục -----
 
-  findAllCategories() {
-    return this.prisma.newsCategory.findMany({
-      orderBy: [{ order: 'asc' }, { slug: 'asc' }],
-      include: { _count: { select: { posts: true } } },
+  /**
+   * Đếm bài theo chuyên mục, tách bài **đã đăng** khỏi **tổng số**.
+   *
+   * Hai con số trả lời hai câu khác nhau: `publishedCount` quyết định chuyên
+   * mục có hiện trên website không; `totalCount` quyết định có xoá được không.
+   *
+   * Dùng MỘT `groupBy` cho toàn bộ bảng thay vì đếm theo từng chuyên mục —
+   * tổng cộng 2 truy vấn cho cả danh sách, không N+1. Prisma không cho hai
+   * `_count` cùng một quan hệ với hai bộ lọc khác nhau, nên `include._count`
+   * không giải được bài toán này.
+   *
+   * `(category_id, status, published_at)` — chỉ mục đã có — phục vụ đúng nhóm
+   * `(category_id, status)` ở đây bằng hai cột dẫn đầu. Không cần index mới.
+   */
+  private async countPostsByCategory() {
+    const rows = await this.prisma.newsPost.groupBy({
+      by: ['categoryId', 'status'],
+      _count: { _all: true },
+    });
+
+    const counts = new Map<string, { published: number; total: number }>();
+    for (const row of rows) {
+      // Bài chưa phân loại (`categoryId = null`) không thuộc chuyên mục nào.
+      if (!row.categoryId) continue;
+      const entry = counts.get(row.categoryId) ?? { published: 0, total: 0 };
+      entry.total += row._count._all;
+      if (row.status === ContentStatus.PUBLISHED) {
+        entry.published += row._count._all;
+      }
+      counts.set(row.categoryId, entry);
+    }
+    return counts;
+  }
+
+  /**
+   * Danh sách chuyên mục kèm số đếm.
+   *
+   * `includeTotal = false` (mặc định, dùng cho route CÔNG KHAI) chỉ trả
+   * `publishedCount`. Website cần biết chuyên mục có bài đã đăng hay không để
+   * ẩn chuyên mục rỗng khỏi chip; nó **không** được biết công ty đang có bao
+   * nhiêu bài nháp. Bản cũ trả `_count.posts` gộp mọi trạng thái trên một route
+   * không cần đăng nhập — bất kỳ ai cũng đếm được số bài chưa xuất bản.
+   */
+  async findAllCategories(includeTotal = false) {
+    const [categories, counts] = await Promise.all([
+      this.prisma.newsCategory.findMany({
+        orderBy: [{ order: 'asc' }, { slug: 'asc' }],
+      }),
+      this.countPostsByCategory(),
+    ]);
+
+    return categories.map((category) => {
+      const count = counts.get(category.id) ?? { published: 0, total: 0 };
+      return {
+        id: category.id,
+        slug: category.slug,
+        name: category.name,
+        order: category.order,
+        publishedCount: count.published,
+        ...(includeTotal ? { totalCount: count.total } : {}),
+      };
     });
   }
 
@@ -219,9 +277,34 @@ export class NewsService {
     }
   }
 
-  /** Bài viết thuộc chuyên mục bị xóa sẽ có `categoryId = null` (onDelete: SetNull). */
+  /**
+   * Xóa chuyên mục — **chặn nếu còn bài**.
+   *
+   * Database vẫn giữ `onDelete: SetNull` làm lưới an toàn cuối, nhưng API từ
+   * chối trước: `SetNull` gỡ nhãn hàng loạt bài **âm thầm và không có đường
+   * lùi**. Xóa nhầm một chuyên mục 11 bài là 11 bài mất phân loại, không Undo,
+   * và URL chuyên mục đang được lập chỉ mục thành 404 ngay lập tức.
+   *
+   * Đếm **mọi trạng thái**, không riêng bài đã đăng: bài nháp cũng là công sức
+   * biên tập, và nó sẽ được xuất bản sau.
+   *
+   * Trả 409 kèm mã máy đọc được `CATEGORY_IN_USE` + số bài trong `details` để
+   * Admin dựng được câu thông báo cụ thể thay vì "có lỗi xảy ra".
+   */
   async removeCategory(slug: string) {
     const category = await this.findCategoryBySlug(slug);
+    const totalCount = await this.prisma.newsPost.count({
+      where: { categoryId: category.id },
+    });
+
+    if (totalCount > 0) {
+      throw new ConflictException({
+        error: CATEGORY_IN_USE_CODE,
+        message: `Chuyên mục đang được ${totalCount} bài viết sử dụng. Hãy chuyển hoặc gỡ các bài đó trước khi xóa chuyên mục.`,
+        totalCount,
+      });
+    }
+
     await this.prisma.newsCategory.delete({ where: { id: category.id } });
     return { deleted: true };
   }

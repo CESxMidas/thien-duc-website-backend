@@ -10,16 +10,15 @@ import {
   Min,
 } from 'class-validator';
 
-/**
- * Slug chuyên mục hợp lệ: chữ thường ASCII, số và dấu gạch ngang; không mở đầu
- * hay kết thúc bằng gạch ngang, không có hai gạch liền.
- *
- * Chặn ngay ở tầng DTO thay vì tin vào Prisma: giá trị này đi thẳng vào mệnh đề
- * `where` của một route **công khai, không đăng nhập**. Prisma vốn đã tham số
- * hóa nên không có SQL injection, nhưng ràng buộc hình dạng giữ cho URL chuyên
- * mục là một tập hữu hạn, đếm được — đúng điều kiện SEO của trang danh mục.
- */
-export const NEWS_CATEGORY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+// Quy tắc slug dùng CHUNG với `CreateNewsCategoryDto` — xem `news-category-slug.ts`.
+// Hai phía lệch nhau thì tạo được chuyên mục mà chính bộ lọc này từ chối.
+import {
+  NEWS_CATEGORY_SLUG_MESSAGE,
+  NEWS_CATEGORY_SLUG_PATTERN,
+} from '../news-category-slug';
+
+// Re-export để consumer cũ (`import ... from './dto/query-news.dto'`) không gãy.
+export { NEWS_CATEGORY_SLUG_PATTERN, NEWS_CATEGORY_SLUG_MESSAGE };
 
 /** Số bài mỗi trang khi client gửi `page` mà không gửi `limit`. */
 export const NEWS_DEFAULT_PAGE_SIZE = 9;
@@ -78,8 +77,6 @@ export class QueryNewsDto {
   @IsOptional()
   @IsString()
   @MaxLength(160)
-  @Matches(NEWS_CATEGORY_SLUG_PATTERN, {
-    message: 'categorySlug chỉ gồm chữ thường, số và dấu gạch ngang',
-  })
+  @Matches(NEWS_CATEGORY_SLUG_PATTERN, { message: NEWS_CATEGORY_SLUG_MESSAGE })
   categorySlug?: string;
 }

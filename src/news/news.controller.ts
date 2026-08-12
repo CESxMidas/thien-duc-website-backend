@@ -9,7 +9,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -35,9 +40,39 @@ export class NewsController {
   // Các route tĩnh (`categories`, `admin`) phải khai báo trước `:slug`,
   // nếu không Nest sẽ khớp chúng vào tham số slug.
 
+  /**
+   * Danh sách chuyên mục CÔNG KHAI — website dùng để dựng chip lọc.
+   *
+   * Cố ý **không** trả `totalCount`: route này không cần đăng nhập, và số bài
+   * nháp/chờ duyệt là thông tin nội bộ. Website chỉ cần biết chuyên mục có bài
+   * đã đăng hay không (để ẩn chuyên mục rỗng khỏi chip) — đúng bằng
+   * `publishedCount`.
+   */
+  @ApiOperation({
+    summary: 'Chuyên mục tin (công khai). Chỉ kèm số bài ĐÃ ĐĂNG.',
+    description:
+      'Không trả tổng số bài: đây là route không cần đăng nhập, số bài chưa xuất bản là thông tin nội bộ.',
+  })
+  @ApiResponse({ status: 200, description: 'Sắp theo `order` rồi `slug`.' })
   @Get('categories')
   findAllCategories() {
     return this.newsService.findAllCategories();
+  }
+
+  /**
+   * Danh sách chuyên mục cho Admin CMS — kèm **cả** `publishedCount` lẫn
+   * `totalCount`. Admin cần `totalCount` để biết chuyên mục có xóa được không;
+   * không được bắt Admin tự suy con số đó từ route công khai.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Chuyên mục tin cho Admin — kèm publishedCount + totalCount.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @Get('categories/admin')
+  findAllCategoriesForAdmin() {
+    return this.newsService.findAllCategories(true);
   }
 
   /**
@@ -58,6 +93,14 @@ export class NewsController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({ summary: 'Tạo chuyên mục tin.' })
+  @ApiResponse({ status: 201, description: 'Đã tạo.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Slug sai định dạng (chữ thường, số, gạch ngang đơn, 3–160 ký tự).',
+  })
+  @ApiResponse({ status: 409, description: 'Slug đã tồn tại.' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Post('categories')
@@ -66,6 +109,12 @@ export class NewsController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa tên song ngữ / thứ tự chuyên mục.',
+    description:
+      'KHÔNG sửa được `slug` — slug là URL công khai đã lập chỉ mục nên bị khoá sau khi tạo. Gửi kèm `slug` sẽ bị từ chối 400.',
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy chuyên mục.' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch('categories/:slug')
@@ -77,6 +126,16 @@ export class NewsController {
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xóa chuyên mục — chỉ khi KHÔNG còn bài viết nào.',
+    description:
+      'Chuyên mục còn bài (mọi trạng thái) trả 409 với `code = CATEGORY_IN_USE` và `details.totalCount`. Không dùng `SetNull` để gỡ nhãn hàng loạt.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Chuyên mục đang được bài viết sử dụng.',
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy chuyên mục.' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Delete('categories/:slug')

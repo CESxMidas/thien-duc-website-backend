@@ -10,6 +10,7 @@ import {
   assertContentStatusTransition,
   initialContentStatus,
 } from '../common/content-approval';
+import { isPubliclyVisible, publiclyVisibleWhere } from '../common/publication';
 import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
@@ -43,9 +44,14 @@ export class NewsService {
 
   // ----- Bài viết -----
 
+  /**
+   * `publishedOnly` = true cho website công khai — lọc theo luật hiển thị dùng
+   * chung (`publiclyVisibleWhere`), nên bài đã tới hạn lên lịch xuất hiện ngay
+   * cả khi reconciler chưa kịp đổi `status`. Admin (false) vẫn thấy mọi bài.
+   */
   findAll(publishedOnly = false) {
     return this.prisma.newsPost.findMany({
-      where: publishedOnly ? { status: ContentStatus.PUBLISHED } : undefined,
+      where: publishedOnly ? publiclyVisibleWhere(new Date()) : undefined,
       orderBy: this.listOrderBy(publishedOnly),
       include: { category: true },
     });
@@ -63,8 +69,12 @@ export class NewsService {
     // đơn giản không khớp bài nào → trang rỗng, `totalPages = 0`. Frontend tự
     // quyết định hiện trạng thái trống hay `notFound()`; ném 500 ở đây thì một
     // URL cũ bị đổi slug sẽ làm sập trang thay vì hiện danh sách rỗng.
+    // MỘT `now` cho cả `count` lẫn `findMany`. Gọi `new Date()` hai lần có thể
+    // rơi vào hai phía của đúng giây đáo hạn: tổng số bài đếm được một đằng,
+    // nội dung trang trả về một nẻo.
+    const now = new Date();
     const where: Prisma.NewsPostWhereInput = {
-      status: ContentStatus.PUBLISHED,
+      ...publiclyVisibleWhere(now),
       ...(categorySlug ? { category: { slug: categorySlug } } : {}),
     };
 
@@ -115,13 +125,17 @@ export class NewsService {
   /**
    * `publishedOnly` bắt buộc bật ở route công khai — nếu không, người ngoài
    * đoán đúng slug là đọc được cả bài nháp lẫn bài đang chờ duyệt.
+   *
+   * Bài chưa tới hạn lên lịch ném **đúng** `NotFoundException` như bài nháp:
+   * không mã lỗi riêng, không "sắp đăng lúc…", không lộ `scheduledAt`. Người
+   * ngoài không được phân biệt "không tồn tại" với "sắp ra mắt".
    */
   async findBySlug(slug: string, publishedOnly = false) {
     const post = await this.prisma.newsPost.findUnique({
       where: { slug },
       include: { category: true },
     });
-    if (!post || (publishedOnly && post.status !== ContentStatus.PUBLISHED)) {
+    if (!post || (publishedOnly && !isPubliclyVisible(post, new Date()))) {
       throw new NotFoundException('Không tìm thấy bài viết');
     }
     return post;
@@ -195,35 +209,55 @@ export class NewsService {
   // ----- Chuyên mục -----
 
   /**
-   * Đếm bài theo chuyên mục, tách bài **đã đăng** khỏi **tổng số**.
+   * Đếm bài theo chuyên mục, tách bài **hiển thị công khai** khỏi **tổng số**.
    *
    * Hai con số trả lời hai câu khác nhau: `publishedCount` quyết định chuyên
    * mục có hiện trên website không; `totalCount` quyết định có xoá được không.
    *
-   * Dùng MỘT `groupBy` cho toàn bộ bảng thay vì đếm theo từng chuyên mục —
-   * tổng cộng 2 truy vấn cho cả danh sách, không N+1. Prisma không cho hai
-   * `_count` cùng một quan hệ với hai bộ lọc khác nhau, nên `include._count`
-   * không giải được bài toán này.
+   * **Vì sao hai `groupBy` chứ không phải một.** Bản cũ gom một lượt theo
+   * `[categoryId, status]` rồi cộng nhánh `PUBLISHED` trong JS — làm được vì
+   * "đã đăng" khi đó đúng bằng một giá trị enum. Từ batch này, "công khai" là
+   * một **biểu thức** (`PUBLISHED` hoặc `PENDING` đã tới hạn), mà `groupBy` của
+   * Prisma không nhóm được theo biểu thức. Hai lượt đếm có `where` riêng vừa
+   * diễn đạt đúng luật, vừa dùng lại nguyên `publiclyVisibleWhere` thay vì chép
+   * luật hiển thị vào JS — chép là cách chắc chắn nhất để hai nơi lệch nhau.
    *
-   * `(category_id, status, published_at)` — chỉ mục đã có — phục vụ đúng nhóm
-   * `(category_id, status)` ở đây bằng hai cột dẫn đầu. Không cần index mới.
+   * Vẫn **2 truy vấn cố định** cho toàn bộ danh sách, không phụ thuộc số chuyên
+   * mục — không N+1. Chạy song song vì độc lập nhau.
+   *
+   * Chỉ mục `(category_id, status, published_at)` đã có phục vụ cả hai lượt qua
+   * hai cột dẫn đầu; nhánh lịch thêm được `news_posts_scheduled_at_idx` (partial)
+   * đỡ. Không cần index mới.
    */
-  private async countPostsByCategory() {
-    const rows = await this.prisma.newsPost.groupBy({
-      by: ['categoryId', 'status'],
-      _count: { _all: true },
-    });
+  private async countPostsByCategory(now: Date) {
+    const [totalRows, visibleRows] = await Promise.all([
+      this.prisma.newsPost.groupBy({
+        by: ['categoryId'],
+        _count: { _all: true },
+      }),
+      this.prisma.newsPost.groupBy({
+        by: ['categoryId'],
+        where: publiclyVisibleWhere(now),
+        _count: { _all: true },
+      }),
+    ]);
 
     const counts = new Map<string, { published: number; total: number }>();
-    for (const row of rows) {
+    const bump = (
+      categoryId: string | null,
+      key: 'published' | 'total',
+      amount: number,
+    ) => {
       // Bài chưa phân loại (`categoryId = null`) không thuộc chuyên mục nào.
-      if (!row.categoryId) continue;
-      const entry = counts.get(row.categoryId) ?? { published: 0, total: 0 };
-      entry.total += row._count._all;
-      if (row.status === ContentStatus.PUBLISHED) {
-        entry.published += row._count._all;
-      }
-      counts.set(row.categoryId, entry);
+      if (!categoryId) return;
+      const entry = counts.get(categoryId) ?? { published: 0, total: 0 };
+      entry[key] += amount;
+      counts.set(categoryId, entry);
+    };
+
+    for (const row of totalRows) bump(row.categoryId, 'total', row._count._all);
+    for (const row of visibleRows) {
+      bump(row.categoryId, 'published', row._count._all);
     }
     return counts;
   }
@@ -236,13 +270,19 @@ export class NewsService {
    * ẩn chuyên mục rỗng khỏi chip; nó **không** được biết công ty đang có bao
    * nhiêu bài nháp. Bản cũ trả `_count.posts` gộp mọi trạng thái trên một route
    * không cần đăng nhập — bất kỳ ai cũng đếm được số bài chưa xuất bản.
+   *
+   * `publishedCount` đếm theo **hiển thị hiệu dụng** ở cả hai route, kể cả route
+   * Admin: nó trả lời "chuyên mục này đang có gì hiện trên website?", và câu trả
+   * lời đó phải như nhau dù ai hỏi. Bài đã tới hạn lên lịch được tính ngay,
+   * không đợi reconciler; bài hẹn tương lai thì không. Riêng `totalCount` (chỉ
+   * Admin) vẫn đếm mọi trạng thái vì nó phục vụ câu hỏi khác: có xoá được không.
    */
   async findAllCategories(includeTotal = false) {
     const [categories, counts] = await Promise.all([
       this.prisma.newsCategory.findMany({
         orderBy: [{ order: 'asc' }, { slug: 'asc' }],
       }),
-      this.countPostsByCategory(),
+      this.countPostsByCategory(new Date()),
     ]);
 
     return categories.map((category) => {

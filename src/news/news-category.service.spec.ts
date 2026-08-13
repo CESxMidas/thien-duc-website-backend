@@ -36,17 +36,26 @@ describe('NewsService — chuyên mục', () => {
   ];
 
   /**
-   * c1: 2 đã đăng + 1 nháp = 3
-   * c2: không có bài nào
-   * c3: 4 nháp + 1 chờ duyệt = 5, chưa bài nào đăng
-   * (kèm một nhóm `categoryId: null` — bài chưa phân loại, không thuộc chuyên mục nào)
+   * Từ Batch 2, "đã đăng công khai" là một **biểu thức** (PUBLISHED, hoặc
+   * PENDING đã tới hạn) chứ không còn là một giá trị enum, nên `groupBy` của
+   * Prisma không nhóm theo nó được. Service chạy hai lượt đếm có `where` riêng:
+   * lượt không lọc cho `totalCount`, lượt lọc theo luật hiển thị cho
+   * `publishedCount`. Mock ở đây phân biệt hai lượt bằng sự có mặt của `where`.
+   *
+   * Dữ liệu dàn dựng:
+   *   c1: 2 PUBLISHED + 1 DRAFT                        → tổng 3, công khai 2
+   *   c2: không có bài nào                             → tổng 0, công khai 0
+   *   c3: 4 DRAFT + 1 PENDING (không lịch)             → tổng 5, công khai 0
+   *   `categoryId: null`: 7 bài chưa phân loại — không thuộc chuyên mục nào
    */
-  const groupRows = [
-    { categoryId: 'c1', status: ContentStatus.PUBLISHED, _count: { _all: 2 } },
-    { categoryId: 'c1', status: ContentStatus.DRAFT, _count: { _all: 1 } },
-    { categoryId: 'c3', status: ContentStatus.DRAFT, _count: { _all: 4 } },
-    { categoryId: 'c3', status: ContentStatus.PENDING, _count: { _all: 1 } },
-    { categoryId: null, status: ContentStatus.PUBLISHED, _count: { _all: 7 } },
+  const totalRows = [
+    { categoryId: 'c1', _count: { _all: 3 } },
+    { categoryId: 'c3', _count: { _all: 5 } },
+    { categoryId: null, _count: { _all: 7 } },
+  ];
+  const visibleRows = [
+    { categoryId: 'c1', _count: { _all: 2 } },
+    { categoryId: null, _count: { _all: 7 } },
   ];
 
   beforeEach(async () => {
@@ -59,7 +68,11 @@ describe('NewsService — chuyên mục', () => {
         update: jest.fn(),
       },
       newsPost: {
-        groupBy: jest.fn().mockResolvedValue(groupRows),
+        groupBy: jest
+          .fn()
+          .mockImplementation((args: { where?: unknown }) =>
+            Promise.resolve(args.where ? visibleRows : totalRows),
+          ),
         count: jest.fn(),
       },
     };
@@ -80,7 +93,7 @@ describe('NewsService — chuyên mục', () => {
       }
     });
 
-    it('publishedCount chỉ đếm bài PUBLISHED, bỏ qua nháp và chờ duyệt', async () => {
+    it('publishedCount bỏ qua nháp và bài chờ duyệt chưa tới hạn', async () => {
       const result = await service.findAllCategories();
       const bySlug = Object.fromEntries(result.map((c) => [c.slug, c]));
 
@@ -136,12 +149,99 @@ describe('NewsService — chuyên mục', () => {
       expect(total).toBe(8);
     });
 
-    it('chỉ MỘT truy vấn đếm cho cả danh sách — không N+1', async () => {
+    it('đúng HAI truy vấn đếm cho cả danh sách, không phụ thuộc số chuyên mục — không N+1', async () => {
       await service.findAllCategories(true);
 
-      expect(prisma.newsPost.groupBy).toHaveBeenCalledTimes(1);
-      const [args] = prisma.newsPost.groupBy.mock.calls[0] as [{ by: unknown }];
-      expect(args.by).toEqual(['categoryId', 'status']);
+      // Hai lượt: một đếm tổng, một đếm phần công khai. Con số này phải cố định
+      // dù có 3 hay 300 chuyên mục.
+      expect(prisma.newsPost.groupBy).toHaveBeenCalledTimes(2);
+      for (const call of prisma.newsPost.groupBy.mock.calls) {
+        const [args] = call as [{ by: unknown }];
+        expect(args.by).toEqual(['categoryId']);
+      }
+    });
+  });
+
+  /**
+   * Đếm chuyên mục là bề mặt rò rỉ khó thấy nhất: nó không trả nội dung, chỉ
+   * trả một con số — nhưng con số tăng lên trước giờ hẹn là đủ để người ngoài
+   * biết công ty sắp đăng gì đó. Bộ test này khoá đúng ranh giới ấy.
+   */
+  describe('publishedCount theo hiển thị hiệu dụng (chống rò rỉ)', () => {
+    const NOW = new Date('2026-08-20T01:00:00.000Z'); // 08:00 giờ VN
+
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('lượt đếm công khai lọc theo luật hiển thị dùng chung', async () => {
+      await service.findAllCategories();
+
+      const withWhere = prisma.newsPost.groupBy.mock.calls
+        .map(([args]) => args as { where?: unknown })
+        .filter((args) => args.where);
+
+      expect(withWhere).toHaveLength(1);
+      expect(withWhere[0].where).toEqual({
+        OR: [
+          { status: ContentStatus.PUBLISHED },
+          {
+            status: ContentStatus.PENDING,
+            scheduledAt: { not: null, lte: NOW },
+          },
+        ],
+      });
+    });
+
+    it('lượt đếm tổng KHÔNG lọc — totalCount vẫn gồm mọi trạng thái', async () => {
+      await service.findAllCategories(true);
+
+      const withoutWhere = prisma.newsPost.groupBy.mock.calls
+        .map(([args]) => args as { where?: unknown })
+        .filter((args) => !args.where);
+
+      expect(withoutWhere).toHaveLength(1);
+    });
+
+    /**
+     * Kịch bản A/B/C/D trên cùng một chuyên mục:
+     *   A. PUBLISHED                      → tính
+     *   B. PENDING + lịch tương lai       → KHÔNG tính
+     *   C. PENDING + lịch đã tới hạn      → tính
+     *   D. DRAFT  + lịch quá hạn (dị dạng)→ KHÔNG tính
+     * publishedCount = A + C = 2; totalCount = cả bốn = 4.
+     */
+    it('A+C được tính, B+D bị loại; totalCount vẫn thấy cả bốn', async () => {
+      prisma.newsCategory.findMany.mockResolvedValue([categories[0]]);
+      prisma.newsPost.groupBy.mockImplementation(
+        (args: { where?: Record<string, unknown> }) =>
+          Promise.resolve(
+            args.where
+              ? // Điều kiện thật của Prisma sẽ loại B và D; mock phản ánh kết quả đó.
+                [{ categoryId: 'c1', _count: { _all: 2 } }]
+              : [{ categoryId: 'c1', _count: { _all: 4 } }],
+          ),
+      );
+
+      const [category] = await service.findAllCategories(true);
+
+      expect(category.publishedCount).toBe(2);
+      expect(category.totalCount).toBe(4);
+    });
+
+    it('route Admin cũng dùng hiển thị hiệu dụng cho publishedCount', async () => {
+      await service.findAllCategories(true);
+
+      const publicCounts = prisma.newsPost.groupBy.mock.calls
+        .map(([args]) => args as { where?: { OR?: unknown } })
+        .filter((args) => args.where);
+
+      // "Đang hiện trên website" phải là cùng một câu trả lời dù ai hỏi.
+      expect(publicCounts[0].where?.OR).toBeDefined();
     });
   });
 

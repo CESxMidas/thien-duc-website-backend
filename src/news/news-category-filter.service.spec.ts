@@ -3,6 +3,23 @@ import { ContentStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NewsService } from './news.service';
 
+/** Mốc cố định: 08:00 giờ VN. Test không phụ thuộc đồng hồ thật. */
+const NOW = new Date('2026-08-20T01:00:00.000Z');
+
+/**
+ * Điều kiện hiển thị công khai mà service gửi xuống Prisma. Từ Batch 2 nó không
+ * còn là `status = PUBLISHED` mà là luật dùng chung ở `common/publication.ts`:
+ * bài đã đăng, HOẶC bài chờ duyệt đã tới hạn lên lịch.
+ */
+function publiclyVisible(now: Date) {
+  return {
+    OR: [
+      { status: ContentStatus.PUBLISHED },
+      { status: ContentStatus.PENDING, scheduledAt: { not: null, lte: now } },
+    ],
+  };
+}
+
 /**
  * Hợp đồng lọc tin theo chuyên mục (`GET /news?page&limit&categorySlug`).
  *
@@ -45,6 +62,11 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     }).compile();
 
     service = moduleRef.get(NewsService);
+    jest.useFakeTimers().setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('không truyền categorySlug: truy vấn giữ nguyên như trước', async () => {
@@ -54,8 +76,8 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     await service.findAllPaginated(1, 9);
     const { countArgs, findArgs } = queries();
 
-    expect(countArgs.where).toEqual({ status: ContentStatus.PUBLISHED });
-    expect(findArgs.where).toEqual({ status: ContentStatus.PUBLISHED });
+    expect(countArgs.where).toEqual(publiclyVisible(NOW));
+    expect(findArgs.where).toEqual(publiclyVisible(NOW));
   });
 
   it('có categorySlug: lọc THÊM chuyên mục, KHÔNG bỏ điều kiện PUBLISHED', async () => {
@@ -66,7 +88,7 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     const { countArgs, findArgs } = queries();
 
     const expected = {
-      status: ContentStatus.PUBLISHED,
+      ...publiclyVisible(NOW),
       category: { slug: 'tin-du-an' },
     };
     expect(countArgs.where).toEqual(expected);
@@ -139,6 +161,6 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
 
     // `?categorySlug=` rỗng phải trả về danh sách đầy đủ, không phải khớp một
     // chuyên mục có slug là chuỗi rỗng (không bao giờ tồn tại → luôn rỗng).
-    expect(findArgs.where).toEqual({ status: ContentStatus.PUBLISHED });
+    expect(findArgs.where).toEqual(publiclyVisible(NOW));
   });
 });

@@ -3,6 +3,23 @@ import { ContentStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NewsService } from './news.service';
 
+/** Mốc cố định: 08:00 giờ VN. Test không phụ thuộc đồng hồ thật. */
+const NOW = new Date('2026-08-20T01:00:00.000Z');
+
+/**
+ * Điều kiện hiển thị công khai mà service gửi xuống Prisma. Từ Batch 2 nó không
+ * còn là `status = PUBLISHED` mà là luật dùng chung ở `common/publication.ts`:
+ * bài đã đăng, HOẶC bài chờ duyệt đã tới hạn lên lịch.
+ */
+function publiclyVisible(now: Date) {
+  return {
+    OR: [
+      { status: ContentStatus.PUBLISHED },
+      { status: ContentStatus.PENDING, scheduledAt: { not: null, lte: now } },
+    ],
+  };
+}
+
 /**
  * THIEN-DUC-NEWS-SLIDER-AND-PAGINATION-M1 — hợp đồng phân trang của
  * `GET /news?page&limit`.
@@ -44,6 +61,11 @@ describe('NewsService.findAllPaginated', () => {
     }).compile();
 
     service = moduleRef.get(NewsService);
+    jest.useFakeTimers().setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('chỉ lấy bài PUBLISHED, mới nhất trước, có khoá phụ id desc', async () => {
@@ -53,8 +75,8 @@ describe('NewsService.findAllPaginated', () => {
     await service.findAllPaginated(1, 9);
     const { countArgs, findArgs } = queries();
 
-    expect(countArgs.where).toEqual({ status: ContentStatus.PUBLISHED });
-    expect(findArgs.where).toEqual({ status: ContentStatus.PUBLISHED });
+    expect(countArgs.where).toEqual(publiclyVisible(NOW));
+    expect(findArgs.where).toEqual(publiclyVisible(NOW));
     expect(findArgs.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
   });
 
@@ -150,6 +172,11 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
       providers: [NewsService, { provide: PrismaService, useValue: prisma }],
     }).compile();
     service = moduleRef.get(NewsService);
+    jest.useFakeTimers().setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('route công khai: chỉ PUBLISHED, publishedAt desc + id desc', async () => {
@@ -158,7 +185,7 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
       { where: unknown; orderBy: unknown },
     ];
 
-    expect(args.where).toEqual({ status: ContentStatus.PUBLISHED });
+    expect(args.where).toEqual(publiclyVisible(NOW));
     expect(args.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
   });
 

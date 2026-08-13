@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { newsPubliclyVisibleSql } from '../common/publication';
 import { SearchQueryDto } from './dto/search-query.dto';
 
 /** Chỉ cần id + rank từ SQL thô; phần dữ liệu lấy lại bằng Prisma. */
@@ -10,9 +11,15 @@ export class SearchService {
   constructor(private readonly prisma: PrismaService) {}
 
   async search({ q, type, limit }: SearchQueryDto) {
+    // Một mốc thời gian cho cả lượt tìm kiếm — hai nhánh không được nhìn thấy
+    // hai thời điểm khác nhau. Hiện chỉ News dùng tới; Projects chưa có lịch
+    // đăng nên vẫn lọc theo `content_status` như cũ (batch riêng của nó).
+    const now = new Date();
     const [projects, news] = await Promise.all([
       type === 'news' ? Promise.resolve([]) : this.searchProjects(q, limit),
-      type === 'projects' ? Promise.resolve([]) : this.searchNews(q, limit),
+      type === 'projects'
+        ? Promise.resolve([])
+        : this.searchNews(q, limit, now),
     ]);
     return { query: q, projects, news };
   }
@@ -59,13 +66,18 @@ export class SearchService {
     return sortByRankedIds(projects, ranked);
   }
 
-  private async searchNews(q: string, limit: number) {
+  private async searchNews(q: string, limit: number, now: Date) {
     // SEC-INJ-001: Use plainto_tsquery instead of websearch_to_tsquery to prevent FTS operator injection
     // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
+    //
+    // Điều kiện hiển thị lấy từ `newsPubliclyVisibleSql` thay vì gõ lại
+    // `status = 'PUBLISHED'`: đây là truy vấn tin duy nhất bằng SQL thô, nên
+    // `where` của Prisma không với tới — và cũng vì thế nó là chỗ dễ bị bỏ quên
+    // nhất khi luật hiển thị đổi. Mảnh SQL dùng bind parameter cho `now`.
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT n."id"
       FROM "news_posts" n, plainto_tsquery('simple', public.immutable_unaccent(${q})) AS query
-      WHERE n."status" = 'PUBLISHED'::"ContentStatus"
+      WHERE ${newsPubliclyVisibleSql(now)}
         AND news_search_document(n."title", n."summary", n."content", n."author") @@ query
       ORDER BY ts_rank(
                  news_search_document(n."title", n."summary", n."content", n."author"),

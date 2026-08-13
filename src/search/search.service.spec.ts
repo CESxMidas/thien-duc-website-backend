@@ -3,6 +3,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SearchService } from './search.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Mốc cố định cho `searchNews` — 08:00 giờ VN. Test không phụ thuộc đồng hồ. */
+const NOW = new Date('2026-08-20T01:00:00.000Z');
+
 describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
   let service: SearchService;
   let prismaService: PrismaService;
@@ -50,7 +53,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'test1 | test2';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchNews'](payload, 10);
+      await service['searchNews'](payload, 10, NOW);
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -68,7 +71,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'project*';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchNews'](payload, 10);
+      await service['searchNews'](payload, 10, NOW);
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -154,7 +157,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = '(a|a)*b';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchNews'](payload, 10);
+      await service['searchNews'](payload, 10, NOW);
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });

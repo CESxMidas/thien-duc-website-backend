@@ -100,13 +100,25 @@ describe('NewsSchedulerService', () => {
       prisma.$queryRaw.mockResolvedValue([]);
       await service.publishDuePosts();
 
-      // COALESCE: bài từng đăng rồi bị hạ nháp và đăng lại vẫn giữ mốc cũ, khớp
-      // với `NewsService.updateStatus`. Bài chưa từng đăng lấy đúng GIỜ ĐÃ HẸN
-      // chứ không phải giờ cron tình cờ chạy — nếu không, thứ tự trang tin
-      // (sắp theo published_at) sẽ phụ thuộc vào lúc cron thức dậy.
+      // COALESCE: lệnh đặt lịch (Batch 3) đã ghi sẵn `published_at =
+      // scheduled_at`, nên nhánh này giữ đúng GIỜ ĐÃ HẸN chứ không phải giờ cron
+      // tình cờ chạy — nếu không, thứ tự trang tin (sắp theo published_at) sẽ
+      // phụ thuộc vào lúc cron thức dậy. Nhánh `scheduled_at` còn lại đỡ cho dữ
+      // liệu cũ tạo trước Batch 3.
       expect(sqlAt(prisma.$queryRaw, 0)).toContain(
         'COALESCE("published_at", "scheduled_at")',
       );
+    });
+
+    it('XOÁ `scheduled_at` sau khi đăng — trạng thái chuẩn tắc khớp Batch 1', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+      await service.publishDuePosts();
+
+      // Batch 1 quy định PUBLISHED ⇒ scheduledAt = NULL cho mọi lần đổi trạng
+      // thái thủ công. Reconciler để lại `scheduled_at` sẽ tạo ra hình dạng dữ
+      // liệu thứ hai cho cùng một trạng thái, và Admin (Batch 4) không phân biệt
+      // được "đã đăng" với "đã đăng nhưng còn lịch treo".
+      expect(sqlAt(prisma.$queryRaw, 0)).toContain('"scheduled_at" = NULL');
     });
 
     it('chạy hai lần liên tiếp là an toàn: lượt sau không khớp bài nào', async () => {

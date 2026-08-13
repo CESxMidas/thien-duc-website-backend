@@ -24,6 +24,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { NEWS_DEFAULT_PAGE_SIZE, QueryNewsDto } from './dto/query-news.dto';
+import { ScheduleNewsPublicationDto } from './dto/schedule-news-publication.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
 import { UpdateNewsPostDto } from './dto/update-news-post.dto';
 import { NewsSchedulerService } from './news-scheduler.service';
@@ -227,6 +228,65 @@ export class NewsController {
     @CurrentUser() user: { role: string },
   ) {
     return this.newsService.updateStatus(slug, dto.status, user.role);
+  }
+
+  /**
+   * Đặt / đổi lịch đăng. Route LỆNH riêng, không đi qua `PATCH :slug` — sửa nội
+   * dung và uỷ quyền đăng trong tương lai là hai việc khác nhau, khác cả quyền.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Đặt hoặc đổi lịch đăng bài. Chỉ ADMIN trở lên.',
+    description:
+      'Đặt lịch tương đương uỷ quyền cho một lần đăng trong tương lai nên chốt quyền y như "Đăng ngay". ' +
+      'Ghi nguyên tử `status = PENDING`, `scheduledAt` và `publishedAt` cùng bằng mốc đã hẹn. ' +
+      '`scheduledAt` bắt buộc kèm múi giờ tường minh (`Z` hoặc `±HH:MM`), cách hiện tại tối thiểu 1 phút và tối đa 2 năm.',
+  })
+  @ApiResponse({ status: 200, description: 'Đã đặt lịch.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Mốc thời gian sai định dạng, thiếu múi giờ, quá gần (<1 phút) hoặc quá xa (>2 năm).',
+  })
+  @ApiResponse({ status: 403, description: 'EDITOR không được đặt lịch.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy bài viết.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Bài đang đăng công khai — phải trả về nháp trước.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch(':slug/schedule')
+  schedulePublication(
+    @Param('slug') slug: string,
+    @Body() dto: ScheduleNewsPublicationDto,
+  ) {
+    return this.newsService.schedulePublication(slug, dto.scheduledAt);
+  }
+
+  /**
+   * Huỷ lịch đăng CHƯA tới hạn. Lịch đã qua giờ nghĩa là bài đang công khai
+   * (vị từ hiển thị của Batch 2), gỡ nó xuống là việc của `PATCH :slug/status`.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Huỷ lịch đăng chưa tới hạn. Chỉ ADMIN trở lên.',
+    description:
+      'Đưa bài về `DRAFT`, xoá `scheduledAt` và `publishedAt` (mốc chưa từng thành sự thật). ' +
+      'Lịch ĐÃ qua giờ bị từ chối 409: khi đó bài đã hiển thị công khai, dùng "Trả về nháp" để gỡ xuống.',
+  })
+  @ApiResponse({ status: 200, description: 'Đã huỷ lịch, bài về nháp.' })
+  @ApiResponse({ status: 403, description: 'EDITOR không được huỷ lịch.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy bài viết.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Bài không có lịch, hoặc lịch đã qua giờ đăng.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Delete(':slug/schedule')
+  cancelScheduledPublication(@Param('slug') slug: string) {
+    return this.newsService.cancelScheduledPublication(slug);
   }
 
   @ApiBearerAuth()

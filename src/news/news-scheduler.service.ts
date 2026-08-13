@@ -52,14 +52,28 @@ export class NewsSchedulerService {
   /**
    * Trả về các bài vừa chuyển sang PUBLISHED. Gọi lại ngay sau đó trả mảng rỗng.
    *
-   * `published_at` giữ nguyên nếu bài từng đăng rồi (đăng lại sau khi hạ nháp),
-   * đồng bộ với `NewsService.updateStatus`.
+   * `published_at` giữ nguyên nếu bài đã có mốc — lệnh đặt lịch
+   * (`NewsService.schedulePublication`) ghi sẵn `published_at = scheduled_at`,
+   * nên `COALESCE` ở đây giữ đúng **giờ đã hẹn**, không phải giờ cron tình cờ
+   * chạy. Nhánh `scheduled_at` chỉ còn đỡ cho dữ liệu cũ tạo trước Batch 3.
+   *
+   * `scheduled_at = NULL` sau khi đăng: trạng thái chuẩn tắc của bài đã đăng là
+   * **không còn lịch treo**. Batch 1 đã áp đúng luật đó cho mọi lần đổi trạng
+   * thái thủ công (`clearedSchedule`); nếu reconciler để lại `scheduled_at`, hai
+   * đường dẫn tới cùng một trạng thái sẽ cho ra hai hình dạng dữ liệu khác nhau,
+   * và Admin không thể phân biệt "đã đăng" với "đã đăng nhưng còn lịch" khi dựng
+   * nhãn ở Batch 4.
+   *
+   * Chạy lại bao nhiêu lần cũng chỉ đăng một lần: `status <> 'PUBLISHED'` khiến
+   * lượt sau không khớp hàng nào — và sau lượt đầu, `scheduled_at IS NOT NULL`
+   * cũng không còn khớp nữa, nên có tới hai lớp chặn.
    */
   async publishDuePosts(): Promise<PublishedRow[]> {
     return this.prisma.$queryRaw<PublishedRow[]>`
       UPDATE "news_posts"
       SET "status" = 'PUBLISHED'::"ContentStatus",
           "published_at" = COALESCE("published_at", "scheduled_at"),
+          "scheduled_at" = NULL,
           "updated_at" = NOW()
       WHERE "status" <> 'PUBLISHED'::"ContentStatus"
         AND "scheduled_at" IS NOT NULL

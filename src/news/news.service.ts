@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -36,6 +37,70 @@ function clearedSchedule(next: ContentStatus): null | undefined {
   return next === ContentStatus.PUBLISHED || next === ContentStatus.DRAFT
     ? null
     : undefined;
+}
+
+/** Lịch phải cách hiện tại ít nhất chừng này — dưới ngưỡng thì dùng "Đăng ngay". */
+export const MIN_SCHEDULE_LEAD_MS = 60_000;
+
+/** Trần 2 năm — chủ yếu để bắt lỗi gõ nhầm năm, thứ hay xảy ra nhất. */
+export const MAX_SCHEDULE_HORIZON_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Bài đã **thật sự** ra công khai bao giờ chưa?
+ *
+ * Nhờ bất biến `scheduledAt != null ⇒ publishedAt = scheduledAt`, `publishedAt`
+ * nằm ở **tương lai** có nghĩa duy nhất: đây là một lịch chưa tới hạn, nội dung
+ * chưa từng hiển thị cho ai. `publishedAt` trong quá khứ thì ngược lại — hoặc
+ * bài từng đăng thật, hoặc lịch đã tới hạn nên Batch 2 đã cho nó ra công khai.
+ *
+ * Đây là thứ phân biệt "huỷ một lịch chưa xảy ra" (xoá sạch dấu vết) với "gỡ
+ * một nội dung đã công khai" (giữ lại mốc lịch sử).
+ */
+function hasBeenPublic(post: { publishedAt: Date | null }, now: Date): boolean {
+  return (
+    post.publishedAt !== null && post.publishedAt.getTime() <= now.getTime()
+  );
+}
+
+/** Hình dạng tối thiểu để xét trạng thái lịch của một bài. */
+type SchedulableState = {
+  status: ContentStatus;
+  scheduledAt: Date | null;
+  publishedAt: Date | null;
+};
+
+/**
+ * Bản ghi có đang giữ một **lịch tương lai hợp lệ** không?
+ *
+ * Đây là thứ phân biệt hai bản ghi trông na ná nhau vì cùng có `publishedAt`
+ * khác NULL:
+ *
+ * - **Lịch đang chờ**: `PENDING`, `scheduledAt` ở tương lai, và `publishedAt`
+ *   **đúng bằng** `scheduledAt` — tức mốc đó do chính lệnh đặt lịch ghi ra, là
+ *   *dự định*, chưa bao giờ thành sự thật. Đổi lịch được.
+ * - **Lịch sử xuất bản thật**: mọi trường hợp còn lại có `publishedAt`. Bài này
+ *   từng ra công khai, mốc đó là *sự kiện đã xảy ra*. Không được ghi đè.
+ *
+ * Bốn điều kiện đều cần thiết. Bỏ `status === PENDING` thì một bài nháp mang
+ * lịch dị dạng sẽ được coi là lịch hợp lệ; bỏ phép so bằng thì một bài từng
+ * đăng năm 2020 rồi bị gán lịch sẽ mất mốc 2020.
+ */
+function isActiveFutureSchedule(post: SchedulableState, now: Date): boolean {
+  return (
+    post.status === ContentStatus.PENDING &&
+    post.scheduledAt !== null &&
+    post.publishedAt !== null &&
+    post.scheduledAt.getTime() > now.getTime() &&
+    post.publishedAt.getTime() === post.scheduledAt.getTime()
+  );
+}
+
+/**
+ * Bài đã có **lịch sử xuất bản thật** chưa? Có `publishedAt`, và mốc đó không
+ * phải là dự định của một lịch tương lai đang chờ.
+ */
+function hasHistoricalPublication(post: SchedulableState, now: Date): boolean {
+  return post.publishedAt !== null && !isActiveFutureSchedule(post, now);
 }
 
 @Injectable()
@@ -188,15 +253,185 @@ export class NewsService {
     const post = await this.findBySlug(slug);
     // EDITOR chỉ được gửi duyệt (DRAFT → PENDING); ADMIN trở lên đặt tùy ý.
     assertContentStatusTransition(actorRole, post.status, status);
-    // Giữ nguyên publishedAt của lần đăng đầu tiên khi bài được đăng lại,
-    // để thứ tự hiển thị ngoài trang tin không nhảy lung tung sau mỗi lần sửa.
-    const publishedAt =
-      status === ContentStatus.PUBLISHED && !post.publishedAt
-        ? new Date()
-        : post.publishedAt;
+    const now = new Date();
     return this.prisma.newsPost.update({
       where: { id: post.id },
-      data: { status, publishedAt, scheduledAt: clearedSchedule(status) },
+      data: {
+        status,
+        publishedAt: this.publishedAtFor(post, status, now),
+        scheduledAt: clearedSchedule(status),
+      },
+    });
+  }
+
+  /**
+   * `publishedAt` cho một lần đổi trạng thái thủ công.
+   *
+   * Ba nhánh, và nhánh giữa là thứ Batch 3 bắt buộc phải thêm:
+   *
+   * - **Đăng ngay một bài đang hẹn lịch chưa tới hạn.** Lệnh đặt lịch đã ghi
+   *   `publishedAt = scheduledAt` ở **tương lai**. Giữ nguyên giá trị đó thì bài
+   *   vừa bấm đăng lại mang mốc công khai nằm ở ngày mai: danh sách công khai
+   *   (sắp theo `publishedAt desc`) đẩy nó lên đầu sai chỗ, sitemap khai
+   *   `lastModified` ở tương lai, và JSON-LD nói bài xuất bản vào một ngày chưa
+   *   đến. Bấm "Đăng ngay" nghĩa là công khai **bây giờ**, nên mốc phải là bây giờ.
+   * - **Đăng một bài chưa từng có mốc nào** → `now`, như trước.
+   * - **Đăng lại một bài từng công khai thật** → giữ mốc lịch sử, đúng hành vi
+   *   đã có từ trước (khoá bởi `news.service.spec.ts`): thứ tự trang tin không
+   *   được nhảy lung tung sau mỗi lần sửa rồi đăng lại.
+   *
+   * Với DRAFT: xoá `publishedAt` **chỉ khi** nó nằm ở tương lai — tức bài chưa
+   * từng công khai, mốc đó chỉ là ý định chứ không phải lịch sử. Bài đã thật sự
+   * công khai (kể cả bài tới hạn mà reconciler chưa chạm tới, vốn đã hiển thị
+   * qua vị từ của Batch 2) giữ nguyên mốc: nó **đã** ra ngoài, xoá đi là xoá mất
+   * sự thật đó.
+   */
+  private publishedAtFor(
+    post: { publishedAt: Date | null },
+    next: ContentStatus,
+    now: Date,
+  ): Date | null | undefined {
+    if (next === ContentStatus.PUBLISHED) {
+      return hasBeenPublic(post, now) ? post.publishedAt : now;
+    }
+    if (next === ContentStatus.DRAFT) {
+      return hasBeenPublic(post, now) ? post.publishedAt : null;
+    }
+    // PENDING: không đụng tới mốc công khai.
+    return post.publishedAt;
+  }
+
+  /**
+   * Đặt (hoặc đổi) lịch đăng cho một bài — lệnh riêng, chốt ADMIN+ ở controller.
+   *
+   * Ghi **nguyên tử ba cột** trong một câu UPDATE:
+   *
+   * ```
+   * status      = PENDING
+   * scheduledAt = mốc yêu cầu
+   * publishedAt = mốc yêu cầu      ← bất biến D
+   * ```
+   *
+   * Vì sao `publishedAt` phải ghi **ngay bây giờ** chứ không đợi reconciler:
+   * Batch 2 cho một bài PENDING đã tới hạn ra công khai *trước khi* cron chạy.
+   * Nếu lúc đó `publishedAt` còn NULL thì bài xuất hiện với thứ tự sai (Postgres
+   * xếp NULL lên đầu ở `ORDER BY ... DESC`), tụt xuống đáy kết quả tìm kiếm
+   * (`NULLS LAST`), và sitemap không có `lastModified`. Mốc phải sẵn sàng từ
+   * trước thời điểm nội dung có thể hiển thị.
+   *
+   * Vì sao trạng thái lưu là `PENDING` chứ không phải một enum `SCHEDULED` mới:
+   * PENDING vừa đúng nghĩa (đã qua uỷ quyền của ADMIN, đang chờ), vừa **fail
+   * safe** — mọi truy vấn cũ chỉ lọc `status = 'PUBLISHED'` mà ta lỡ bỏ sót đều
+   * tự động giấu bài này đi. Rủi ro của việc quên là "hiện muộn", không phải
+   * "rò rỉ sớm".
+   */
+  async schedulePublication(slug: string, scheduledAtIso: string) {
+    const post = await this.findBySlug(slug);
+    // MỘT `now` cho cả kiểm tra lẫn ghi — dùng hai mốc khác nhau thì một lịch
+    // sát ngưỡng có thể qua được validate rồi ghi xuống ở trạng thái không hợp lệ.
+    const now = new Date();
+    const scheduledAt = new Date(scheduledAtIso);
+
+    // Đọc lại trạng thái hiện tại rồi mới quyết định: hai ADMIN thao tác song
+    // song thì lệnh đến sau vẫn thấy kết quả của lệnh đến trước.
+    if (post.status === ContentStatus.PUBLISHED) {
+      // Không có versioning nội dung: một slug là một hàng, đang phục vụ một URL
+      // công khai. Đặt lịch cho nó chỉ có hai cách hiểu, cả hai đều đánh lừa
+      // người dùng — hoặc nội dung mới lên ngay lập tức (lịch vô nghĩa), hoặc
+      // URL đang được index biến mất tới giờ hẹn.
+      throw new ConflictException(
+        'Bài viết đang được đăng công khai nên không đặt lịch được.',
+      );
+    }
+
+    // Bài TỪNG công khai thì không hẹn giờ lại được ở v1, kể cả khi đã gỡ về
+    // nháp. Ghi lịch mới sẽ ghi đè `publishedAt` — mà `publishedAt` ở dự án này
+    // luôn có nghĩa là **lần công khai ĐẦU TIÊN** (Batch 1 và Batch 2 đều giữ
+    // nguyên mốc đó qua mọi lần đăng lại). Ghi đè nó là âm thầm định nghĩa lại
+    // field thành "lần đăng gần nhất".
+    //
+    // Đăng lại theo lịch là một nghiệp vụ khác — nó kéo theo một loạt câu hỏi
+    // chưa ai trả lời: bài có nhảy lên đầu trang tin không, `datePublished`
+    // trong JSON-LD giữ mốc cũ hay mốc mới, sitemap đổi `lastModified` thế nào,
+    // xếp hạng tìm kiếm dùng mốc nào, và lịch sử cũ có lấy lại được không.
+    // Schema hiện không có bảng phiên bản/lịch sử để trả lời. Không trả lời
+    // ngầm bằng một câu UPDATE.
+    if (hasHistoricalPublication(post, now)) {
+      throw new ConflictException(
+        'Bài viết này đã từng được đăng nên không đặt lịch đăng lại được.',
+      );
+    }
+
+    const leadMs = scheduledAt.getTime() - now.getTime();
+    if (leadMs < MIN_SCHEDULE_LEAD_MS) {
+      throw new BadRequestException(
+        'Thời điểm đăng phải ở tương lai, cách hiện tại ít nhất 1 phút. Dùng "Đăng ngay" nếu muốn đăng lúc này.',
+      );
+    }
+    if (leadMs > MAX_SCHEDULE_HORIZON_MS) {
+      throw new BadRequestException(
+        'Thời điểm đăng quá xa (tối đa 2 năm). Hãy kiểm tra lại năm.',
+      );
+    }
+
+    return this.prisma.newsPost.update({
+      where: { id: post.id },
+      data: {
+        status: ContentStatus.PENDING,
+        scheduledAt,
+        publishedAt: scheduledAt,
+      },
+    });
+  }
+
+  /**
+   * Huỷ lịch đăng — đưa bài về trạng thái nháp sạch sẽ.
+   *
+   * **Chỉ áp dụng cho lịch CHƯA tới hạn.** Nếu `scheduledAt <= now` thì theo vị
+   * từ của Batch 2, bài **đã đang hiển thị công khai** rồi, dù `status` còn là
+   * PENDING vì reconciler chưa chạy. Lúc đó thao tác không còn là "huỷ một việc
+   * chưa xảy ra" mà là **gỡ nội dung đang công khai** — một hành động khác hẳn,
+   * đã có nút riêng ("Trả về nháp"), và có hệ quả khác với `publishedAt`. Gộp
+   * hai thứ vào một nút sẽ âm thầm xoá mất mốc lịch sử của một bài từng ra ngoài.
+   *
+   * Trạng thái sau khi huỷ:
+   * ```
+   * status      = DRAFT
+   * scheduledAt = NULL
+   * publishedAt = NULL     ← bài chưa từng công khai nên mốc đó chỉ là ý định
+   * ```
+   */
+  async cancelScheduledPublication(slug: string) {
+    const post = await this.findBySlug(slug);
+    const now = new Date();
+
+    if (post.scheduledAt === null) {
+      throw new ConflictException('Bài viết này không có lịch đăng nào.');
+    }
+    if (post.scheduledAt.getTime() <= now.getTime()) {
+      throw new ConflictException(
+        'Đã qua giờ đăng theo lịch nên bài đang hiển thị công khai. Dùng "Trả về nháp" để gỡ bài xuống.',
+      );
+    }
+    // Còn lại: `scheduledAt` ở tương lai nhưng bản ghi KHÔNG phải một lịch hợp
+    // lệ — bài từng công khai và bị gán thêm lịch, hoặc tổ hợp dị dạng từ dữ
+    // liệu cũ. Nhánh xoá bên dưới sẽ xoá `publishedAt`, mà ở đây mốc đó là lịch
+    // sử thật. Từ chối thay vì xoá lịch sử.
+    if (!isActiveFutureSchedule(post, now)) {
+      throw new ConflictException(
+        'Bài viết này đã từng được đăng nên không huỷ lịch theo cách này được. Dùng "Trả về nháp" để gỡ bài xuống.',
+      );
+    }
+
+    return this.prisma.newsPost.update({
+      where: { id: post.id },
+      data: {
+        status: ContentStatus.DRAFT,
+        scheduledAt: null,
+        // Lịch hợp lệ chưa tới hạn ⇒ `publishedAt` (= scheduledAt) nằm ở tương
+        // lai và chưa bao giờ là sự thật. Xoá để bài về đúng trạng thái nháp sạch.
+        publishedAt: null,
+      },
     });
   }
 

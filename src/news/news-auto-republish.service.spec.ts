@@ -21,13 +21,24 @@ describe('NewsService.updateStatus — dọn lịch để không tự đăng l�
   let service: NewsService;
   let prisma: { newsPost: { findUnique: jest.Mock; update: jest.Mock } };
 
-  /** Bài đã lên lịch trong QUÁ KHỨ và đã được đăng — đúng tiền đề của lỗi. */
+  /** Đồng hồ cố định để `publishedAt` quá khứ/tương lai là xác định. */
+  const NOW = new Date('2026-08-20T01:00:00.000Z'); // 08:00 giờ VN
+  const PAST = new Date('2026-07-01T00:00:00.000Z');
+
+  /**
+   * Bài đã lên lịch trong QUÁ KHỨ và đã thật sự công khai — đúng tiền đề của lỗi.
+   *
+   * `publishedAt` nằm ở quá khứ là điều kiện quan trọng: từ Batch 3, mốc quá khứ
+   * nghĩa là bài **đã từng ra ngoài**, nên nó là lịch sử phải giữ. Mốc tương lai
+   * thì ngược lại — chỉ là ý định của một lịch chưa tới hạn, và bị xoá khi trả
+   * bài về nháp (khoá riêng ở `news-schedule-command.service.spec.ts`).
+   */
   const scheduledAndPublished = {
     id: 'n1',
     slug: 'bai-da-len-lich',
     status: ContentStatus.PUBLISHED,
-    publishedAt: new Date('2026-08-20T01:00:00Z'),
-    scheduledAt: new Date('2026-08-20T01:00:00Z'),
+    publishedAt: PAST,
+    scheduledAt: PAST,
   };
 
   /** Đọc `data` của lời gọi `prisma.newsPost.update` gần nhất. */
@@ -52,6 +63,11 @@ describe('NewsService.updateStatus — dọn lịch để không tự đăng l�
     prisma.newsPost.update.mockImplementation(
       (args: { data: Record<string, unknown> }) => ({ id: 'n1', ...args.data }),
     );
+    jest.useFakeTimers().setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('PUBLISHED → DRAFT: xoá scheduledAt (bài KHÔNG thể tự đăng lại)', async () => {

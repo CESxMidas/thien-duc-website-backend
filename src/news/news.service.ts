@@ -18,6 +18,25 @@ import { UpdateNewsPostDto } from './dto/update-news-post.dto';
 
 const UNIQUE_CONSTRAINT = 'P2002';
 
+/**
+ * `scheduledAt` phải bị xoá khi đổi trạng thái **thủ công** sang PUBLISHED hoặc
+ * DRAFT — trả `null` để xoá, `undefined` để không đụng tới cột.
+ *
+ * Vì sao cần: `NewsSchedulerService` khớp `status <> 'PUBLISHED' AND
+ * scheduled_at <= NOW()`. Một bài từng lên lịch rồi được ADMIN gỡ về nháp vẫn
+ * giữ nguyên `scheduled_at` ở quá khứ, nên nó khớp lại điều kiện đó và **tự
+ * đăng lại** trong vòng 5 phút — đúng thứ mà thao tác "Trả về nháp" muốn ngăn.
+ *
+ * PENDING cố ý KHÔNG xoá: theo mô hình đã duyệt, "đã lên lịch" chính là
+ * `PENDING` + `scheduledAt`. Xoá ở đây sẽ huỷ lịch một cách âm thầm mỗi lần
+ * ADMIN chuyển bài về hàng chờ duyệt.
+ */
+function clearedSchedule(next: ContentStatus): null | undefined {
+  return next === ContentStatus.PUBLISHED || next === ContentStatus.DRAFT
+    ? null
+    : undefined;
+}
+
 @Injectable()
 export class NewsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -109,7 +128,7 @@ export class NewsService {
   }
 
   async create(dto: CreateNewsPostDto, actorRole?: string) {
-    const { eventDate, scheduledAt, ...rest } = dto;
+    const { eventDate, ...rest } = dto;
     // SUPER_ADMIN bỏ qua luồng duyệt: bài đăng ngay (PUBLISHED) kèm publishedAt
     // để trang tin công khai (sắp theo publishedAt) hiển thị đúng thứ tự. Vai
     // trò khác lưu nháp như cũ.
@@ -122,7 +141,6 @@ export class NewsService {
           summary: json(rest.summary),
           content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
-          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
           status,
           publishedAt:
             status === ContentStatus.PUBLISHED ? new Date() : undefined,
@@ -135,7 +153,7 @@ export class NewsService {
 
   async update(slug: string, dto: UpdateNewsPostDto) {
     const post = await this.findBySlug(slug);
-    const { eventDate, scheduledAt, ...rest } = dto;
+    const { eventDate, ...rest } = dto;
     try {
       return await this.prisma.newsPost.update({
         where: { id: post.id },
@@ -145,7 +163,6 @@ export class NewsService {
           summary: json(rest.summary),
           content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
-          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
         } satisfies Prisma.NewsPostUncheckedUpdateInput,
       });
     } catch (error) {
@@ -165,7 +182,7 @@ export class NewsService {
         : post.publishedAt;
     return this.prisma.newsPost.update({
       where: { id: post.id },
-      data: { status, publishedAt },
+      data: { status, publishedAt, scheduledAt: clearedSchedule(status) },
     });
   }
 

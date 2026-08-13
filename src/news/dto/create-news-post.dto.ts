@@ -76,8 +76,24 @@ export class CreateNewsPostDto {
   @IsDateString()
   eventDate?: string;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsDateString()
-  scheduledAt?: string;
+  /**
+   * KHÔNG có `scheduledAt` ở đây — cố ý, đây là chốt bảo mật.
+   *
+   * `POST /news` và `PATCH /news/:slug` (qua `UpdateNewsPostDto = PartialType`)
+   * mở cho **EDITOR**, trong khi `assertContentStatusTransition` chỉ cho EDITOR
+   * đi đúng một bước `DRAFT → PENDING` — EDITOR không được đăng bài. Nhưng
+   * `scheduledAt` từng nằm trong DTO này mà không kiểm vai trò, cũng không kiểm
+   * thời điểm: một EDITOR đặt `scheduledAt` vào quá khứ là `NewsSchedulerService`
+   * (lượt kế tiếp, ≤5 phút) đăng bài lên website, bỏ qua trọn vẹn luồng duyệt.
+   *
+   * Vì `ValidationPipe` bật `whitelist` + `forbidNonWhitelisted`, việc gỡ field
+   * khỏi DTO không phải là "bỏ qua field" mà là **từ chối 400** — đúng thứ ta
+   * muốn: client cũ gửi nhầm sẽ thấy lỗi thay vì âm thầm mất dữ liệu.
+   *
+   * Đặt lịch sẽ có route lệnh riêng chốt ADMIN+ ở batch sau. Đừng thêm lại field
+   * này vào DTO nội dung chung.
+   *
+   * `scheduledAt` vẫn được **đọc** bình thường trong response — chốt này chỉ
+   * đóng đường GHI.
+   */
 }

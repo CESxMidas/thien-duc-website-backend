@@ -198,12 +198,14 @@ export class NewsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Tạo bài viết mới — luôn ở trạng thái nháp.',
+    description:
+      'Bài mới KHÔNG bao giờ tự công khai, kể cả khi người tạo là SUPER_ADMIN. Việc đăng đi qua lệnh riêng: `PATCH /news/:slug/status` (đăng ngay / gửi duyệt) hoặc `PATCH /news/:slug/schedule` (hẹn giờ). Payload không nhận `status` lẫn `scheduledAt`.',
+  })
   @Post()
-  create(
-    @Body() dto: CreateNewsPostDto,
-    @CurrentUser() user: { role: string },
-  ) {
-    return this.newsService.create(dto, user.role);
+  create(@Body() dto: CreateNewsPostDto) {
+    return this.newsService.create(dto);
   }
 
   @ApiBearerAuth()

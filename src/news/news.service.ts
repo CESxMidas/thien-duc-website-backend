@@ -7,10 +7,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import {
-  assertContentStatusTransition,
-  initialContentStatus,
-} from '../common/content-approval';
+import { assertContentStatusTransition } from '../common/content-approval';
 import { isPubliclyVisible, publiclyVisibleWhere } from '../common/publication';
 import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
@@ -206,12 +203,31 @@ export class NewsService {
     return post;
   }
 
-  async create(dto: CreateNewsPostDto, actorRole?: string) {
+  /**
+   * Tạo bài mới — **luôn** ở trạng thái nháp, với MỌI vai trò.
+   *
+   * Trước Batch 5, SUPER_ADMIN tạo bài là bài ra công khai ngay (`PUBLISHED` +
+   * `publishedAt = now`) theo lối "bỏ qua luồng duyệt". Cách đó gộp hai thứ
+   * khác hẳn nhau vào một: **được quyền đăng** và **đăng ngay bây giờ**. Hệ quả
+   * là SUPER_ADMIN mất hẳn khả năng hẹn giờ cho bài của chính mình: bài vừa
+   * sinh ra đã công khai, nên `schedulePublication` từ chối 409 ("đang được
+   * đăng công khai"); gỡ về nháp cũng không cứu được vì `publishedAt` lúc đó đã
+   * là lịch sử thật, và lệnh đặt lịch chỉ nhận nội dung CHƯA từng công khai.
+   *
+   * Nay việc công khai chỉ xảy ra qua **lệnh tường minh** — `PATCH :slug/status`
+   * (đăng ngay / gửi duyệt) hoặc `PATCH :slug/schedule` (hẹn giờ). Tạo nội dung
+   * không còn ngầm mang nghĩa "đăng". Quyền hạn KHÔNG đổi: SUPER_ADMIN vẫn đăng
+   * thẳng `DRAFT → PUBLISHED` được ngay sau đó (xem `assertContentStatusTransition`),
+   * chỉ là phải nói ra ý định đó.
+   *
+   * Đổi ngay tại đây chứ không đổi `initialContentStatus`: helper ấy còn được
+   * Projects, Pages và Cooperation dùng chung, mà ba module đó chưa có luồng
+   * đặt lịch nên không có lý do gì để đổi hành vi của chúng trong batch này.
+   *
+   * Chỉ ảnh hưởng bài TẠO MỚI từ đây trở đi — không đụng tới bài đã có.
+   */
+  async create(dto: CreateNewsPostDto) {
     const { eventDate, ...rest } = dto;
-    // SUPER_ADMIN bỏ qua luồng duyệt: bài đăng ngay (PUBLISHED) kèm publishedAt
-    // để trang tin công khai (sắp theo publishedAt) hiển thị đúng thứ tự. Vai
-    // trò khác lưu nháp như cũ.
-    const status = initialContentStatus(actorRole);
     try {
       return await this.prisma.newsPost.create({
         data: {
@@ -220,9 +236,16 @@ export class NewsService {
           summary: json(rest.summary),
           content: json(rest.content),
           eventDate: eventDate ? new Date(eventDate) : undefined,
-          status,
-          publishedAt:
-            status === ContentStatus.PUBLISHED ? new Date() : undefined,
+          // Ba cột xuất bản do SERVER đặt, ghi SAU `...rest` nên payload không
+          // chèn được vào. `forbidNonWhitelisted` đã chặn field lạ từ tầng
+          // ValidationPipe; ghi tường minh ở đây là lớp chốt thứ hai, và cũng
+          // là cách nói rõ trạng thái xuất phát của mọi bài mới.
+          //
+          // Không mốc công khai, không lịch — bài chưa từng hiển thị cho ai.
+          // Đây chính là điều kiện để `schedulePublication` chấp nhận hẹn giờ.
+          status: ContentStatus.DRAFT,
+          publishedAt: null,
+          scheduledAt: null,
         } satisfies Prisma.NewsPostUncheckedCreateInput,
       });
     } catch (error) {

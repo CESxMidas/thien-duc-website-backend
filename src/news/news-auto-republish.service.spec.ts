@@ -139,6 +139,25 @@ describe('NewsService.updateStatus — dọn lịch để không tự đăng l�
     expect(lastUpdateData().scheduledAt).toBeUndefined();
   });
 
+  it('có HAI lớp chặn tự đăng lại, không chỉ một', async () => {
+    prisma.newsPost.findUnique.mockResolvedValue(scheduledAndPublished);
+
+    await service.updateStatus(
+      'bai-da-len-lich',
+      ContentStatus.DRAFT,
+      Role.ADMIN,
+    );
+
+    // Lớp 1 (Batch 1): xoá `scheduledAt` nên hàng không còn khớp
+    // `scheduled_at IS NOT NULL` của reconciler.
+    expect(lastUpdateData().scheduledAt).toBeNull();
+
+    // Lớp 2 (bản vá này): kể cả khi lớp 1 bị bỏ sót ở một đường ghi nào đó,
+    // reconciler quét theo `status = 'PENDING'` nên bài DRAFT không bao giờ nằm
+    // trong tập quét. Hợp đồng đó khoá ở `news-scheduler.service.spec.ts`.
+    expect(lastUpdateData().status).toBe(ContentStatus.DRAFT);
+  });
+
   it('EDITOR không đăng được → không có lời gọi ghi nào, lịch giữ nguyên', async () => {
     prisma.newsPost.findUnique.mockResolvedValue(scheduledAndPublished);
 

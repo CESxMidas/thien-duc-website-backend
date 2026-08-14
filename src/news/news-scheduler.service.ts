@@ -64,9 +64,24 @@ export class NewsSchedulerService {
    * và Admin không thể phân biệt "đã đăng" với "đã đăng nhưng còn lịch" khi dựng
    * nhãn ở Batch 4.
    *
-   * Chạy lại bao nhiêu lần cũng chỉ đăng một lần: `status <> 'PUBLISHED'` khiến
-   * lượt sau không khớp hàng nào — và sau lượt đầu, `scheduled_at IS NOT NULL`
-   * cũng không còn khớp nữa, nên có tới hai lớp chặn.
+   * Chạy lại bao nhiêu lần cũng chỉ đăng một lần: sau lượt đầu bản ghi đã là
+   * PUBLISHED nên không còn khớp `status = 'PENDING'`, và `scheduled_at` cũng đã
+   * NULL nên không khớp `scheduled_at IS NOT NULL` — hai lớp chặn độc lập.
+   *
+   * ## Vì sao điều kiện là `status = 'PENDING'` chứ không phải `<> 'PUBLISHED'`
+   *
+   * Đây là chốt bảo mật, không phải chuyện gọn câu SQL.
+   *
+   * Vị từ hiển thị công khai (`common/publication.ts`) cố ý bắt nhánh lịch phải
+   * kèm `PENDING`, để một hàng dị dạng `DRAFT` + `scheduled_at` quá khứ **không**
+   * lọt ra ngoài. Nhưng nếu reconciler quét theo `status <> 'PUBLISHED'` thì nó
+   * khớp luôn cả hàng DRAFT đó và **tự tay đổi nó thành PUBLISHED** — sau đó
+   * hàng này công khai qua nhánh thứ nhất của chính vị từ kia. Lớp phòng thủ bị
+   * vô hiệu hoá từ phía sau, bởi một job chạy nền không ai nhìn.
+   *
+   * Nguyên tắc: **tập bài reconciler được phép đăng phải là tập con của tập bài
+   * vị từ hiển thị coi là công khai.** `status = 'PENDING'` làm hai bên khớp
+   * nhau đúng từng điều kiện một.
    */
   async publishDuePosts(): Promise<PublishedRow[]> {
     return this.prisma.$queryRaw<PublishedRow[]>`
@@ -75,7 +90,7 @@ export class NewsSchedulerService {
           "published_at" = COALESCE("published_at", "scheduled_at"),
           "scheduled_at" = NULL,
           "updated_at" = NOW()
-      WHERE "status" <> 'PUBLISHED'::"ContentStatus"
+      WHERE "status" = 'PENDING'::"ContentStatus"
         AND "scheduled_at" IS NOT NULL
         AND "scheduled_at" <= NOW()
       RETURNING "id", "slug"

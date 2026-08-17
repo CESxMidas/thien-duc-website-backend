@@ -6,10 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import {
-  assertContentStatusTransition,
-  initialContentStatus,
-} from '../common/content-approval';
+import { assertContentStatusTransition } from '../common/content-approval';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 
@@ -38,15 +35,26 @@ export class PagesService {
     return page;
   }
 
-  async create(dto: CreatePageDto, actorRole?: string) {
+  /**
+   * Tạo trang mới — **luôn** ở trạng thái nháp, với MỌI vai trò.
+   *
+   * Trước batch này SUPER_ADMIN tạo trang là trang lên website ngay. Với trang
+   * nội dung thì điều đó còn khó chịu hơn tin tức: trang mới thường được dựng
+   * dần qua nhiều lần lưu, mà mỗi lần lưu đầu tiên đã là một URL công khai còn
+   * dở dang. Nay công khai đi qua lệnh riêng `PATCH /pages/:slug/status`.
+   * Quyền hạn KHÔNG đổi.
+   */
+  async create(dto: CreatePageDto) {
     try {
       return await this.prisma.page.create({
         data: {
           ...dto,
           title: json(dto.title),
           content: json(dto.content),
-          // SUPER_ADMIN bỏ qua luồng duyệt → trang xuất bản ngay; vai trò khác nháp.
-          status: initialContentStatus(actorRole),
+          // Trạng thái xuất bản do SERVER đặt, ghi SAU `...dto`. DTO nội dung
+          // không khai báo `status` nên `forbidNonWhitelisted` đã chặn từ tầng
+          // ValidationPipe; dòng này là lớp chốt thứ hai.
+          status: ContentStatus.DRAFT,
         } satisfies Prisma.PageCreateInput,
       });
     } catch (error) {

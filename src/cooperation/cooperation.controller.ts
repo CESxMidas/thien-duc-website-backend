@@ -67,12 +67,14 @@ export class CooperationController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Tạo dự án hợp tác mới — luôn ở trạng thái nháp.',
+    description:
+      'Dự án mới KHÔNG bao giờ tự công khai, kể cả khi người tạo là SUPER_ADMIN. Việc đăng đi qua lệnh riêng `PATCH /cooperation/:id/status`. Payload không nhận `contentStatus`.',
+  })
   @Post()
-  create(
-    @Body() dto: CreateCooperationProjectDto,
-    @CurrentUser() user: { role: string },
-  ) {
-    return this.cooperationService.create(dto, user.role);
+  create(@Body() dto: CreateCooperationProjectDto) {
+    return this.cooperationService.create(dto);
   }
 
   @ApiBearerAuth()

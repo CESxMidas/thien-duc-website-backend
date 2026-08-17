@@ -6,10 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import {
-  assertContentStatusTransition,
-  initialContentStatus,
-} from '../common/content-approval';
+import { assertContentStatusTransition } from '../common/content-approval';
 import { CreateCooperationProjectDto } from './dto/create-cooperation-project.dto';
 import { UpdateCooperationProjectDto } from './dto/update-cooperation-project.dto';
 
@@ -39,7 +36,14 @@ export class CooperationService {
     return project;
   }
 
-  create(dto: CreateCooperationProjectDto, actorRole?: string) {
+  /**
+   * Tạo dự án hợp tác mới — **luôn** ở trạng thái nháp, với MỌI vai trò.
+   *
+   * Trước batch này SUPER_ADMIN tạo là dự án hiện ngay ở section "Dự án hợp
+   * tác" trang chủ. Nay công khai đi qua lệnh riêng
+   * `PATCH /cooperation/:id/status`, nơi có kiểm vai trò. Quyền hạn KHÔNG đổi.
+   */
+  create(dto: CreateCooperationProjectDto) {
     return this.prisma.cooperationProject.create({
       data: {
         ...dto,
@@ -50,8 +54,9 @@ export class CooperationService {
         scale: json(dto.scale),
         status: json(dto.status),
         // `status` ở trên là trạng thái mô tả (chữ) của dự án; `contentStatus`
-        // mới là bậc thang duyệt. SUPER_ADMIN xuất bản ngay; vai trò khác nháp.
-        contentStatus: initialContentStatus(actorRole),
+        // mới là bậc thang duyệt — do SERVER đặt, ghi SAU `...dto` (Batch 6 đã
+        // gỡ field này khỏi DTO nội dung).
+        contentStatus: ContentStatus.DRAFT,
       } satisfies Prisma.CooperationProjectCreateInput,
     });
   }

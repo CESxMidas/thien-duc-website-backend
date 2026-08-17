@@ -93,9 +93,14 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Tạo dự án mới — luôn ở trạng thái nháp.',
+    description:
+      'Dự án mới KHÔNG bao giờ tự công khai, kể cả khi người tạo là SUPER_ADMIN. Việc đăng đi qua lệnh riêng `PATCH /projects/:slug/status`. Payload không nhận `contentStatus`.',
+  })
   @Post()
-  create(@Body() dto: CreateProjectDto, @CurrentUser() user: { role: string }) {
-    return this.projectsService.create(dto, user.role);
+  create(@Body() dto: CreateProjectDto) {
+    return this.projectsService.create(dto);
   }
 
   @ApiBearerAuth()

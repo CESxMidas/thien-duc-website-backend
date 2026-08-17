@@ -56,9 +56,14 @@ export class PagesController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Tạo trang mới — luôn ở trạng thái nháp.',
+    description:
+      'Trang mới KHÔNG bao giờ tự công khai, kể cả khi người tạo là SUPER_ADMIN. Việc đăng đi qua lệnh riêng `PATCH /pages/:slug/status`. Payload không nhận `status`.',
+  })
   @Post()
-  create(@Body() dto: CreatePageDto, @CurrentUser() user: { role: string }) {
-    return this.pagesService.create(dto, user.role);
+  create(@Body() dto: CreatePageDto) {
+    return this.pagesService.create(dto);
   }
 
   @ApiBearerAuth()

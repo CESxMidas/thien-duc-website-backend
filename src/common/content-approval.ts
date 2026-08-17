@@ -2,28 +2,20 @@ import { ForbiddenException } from '@nestjs/common';
 import { ContentStatus, Role } from '../../generated/prisma/client';
 
 /**
- * Luồng duyệt nội dung của Admin CMS đi theo bậc thang trạng thái
- * `DRAFT → PENDING → PUBLISHED`: nội dung mới lưu nháp, nhân viên gửi duyệt, rồi
- * Admin duyệt & đăng. SUPER_ADMIN là vai trò cao nhất nên **bỏ qua** luồng này
- * cho chính thao tác của họ — không phải tự duyệt nội dung mình vừa tạo.
+ * Luồng duyệt nội dung của Admin CMS đi theo bậc thang `DRAFT → PENDING →
+ * PUBLISHED`. Nội dung mới **luôn** bắt đầu ở `DRAFT`, với mọi vai trò — không
+ * còn helper `initialContentStatus(role)` / `canBypassApproval(role)` nào ở đây.
  *
- * Vai trò thấp hơn (EDITOR, ADMIN) giữ nguyên quy trình cũ. Helper nhận `role`
- * dạng chuỗi (khớp payload JWT `req.user.role`) để controller truyền thẳng
- * `user.role` mà không cần ép kiểu.
+ * Vì sao bỏ hẳn: hai hàm đó gộp **quyền được đăng** với **mặc định sau khi
+ * tạo**. SUPER_ADMIN có quyền đăng, nhưng "tạo nội dung" và "quyết định cho nội
+ * dung ra công khai" là hai việc khác nhau, và gộp lại làm mất cả khả năng hẹn
+ * giờ cho chính nội dung của họ (đã đo được ở News: bài vừa tạo đã công khai
+ * nên không đặt lịch được nữa). Nay mỗi service tự ghi `DRAFT` tường minh, còn
+ * việc công khai đi qua đúng một cửa: route `.../status` bên dưới.
+ *
+ * Giữ một hàm trả về hằng số `DRAFT` nhưng vẫn nhận tham số `role` sẽ là cái
+ * bẫy: đọc chữ ký thì tưởng có luật theo vai trò, đọc thân hàm mới biết không.
  */
-export function canBypassApproval(role?: string | null): boolean {
-  return role === Role.SUPER_ADMIN;
-}
-
-/**
- * Trạng thái khởi tạo khi **tạo mới** nội dung: SUPER_ADMIN đăng ngay
- * (`PUBLISHED`), các vai trò khác lưu nháp (`DRAFT`) rồi đi theo luồng duyệt.
- */
-export function initialContentStatus(role?: string | null): ContentStatus {
-  return canBypassApproval(role)
-    ? ContentStatus.PUBLISHED
-    : ContentStatus.DRAFT;
-}
 
 /**
  * Chốt quyền **đổi trạng thái** nội dung, dùng chung cho mọi module (News,

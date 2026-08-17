@@ -6,10 +6,7 @@ import {
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
-import {
-  assertContentStatusTransition,
-  initialContentStatus,
-} from '../common/content-approval';
+import { assertContentStatusTransition } from '../common/content-approval';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -107,7 +104,19 @@ export class ProjectsService {
     return item;
   }
 
-  async create(dto: CreateProjectDto, actorRole?: string) {
+  /**
+   * Tạo dự án mới — **luôn** ở trạng thái nháp, với MỌI vai trò.
+   *
+   * Trước batch này, SUPER_ADMIN tạo dự án là dự án ra công khai ngay
+   * (`initialContentStatus`). Cách đó gộp **quyền được đăng** với **hành động
+   * đăng**: chỉ bấm "Tạo dự án" là nội dung chưa ai đọc lại đã nằm trên
+   * website. Nay việc công khai chỉ xảy ra qua lệnh tường minh
+   * `PATCH /projects/:slug/status`. Quyền hạn KHÔNG đổi — SUPER_ADMIN vẫn đăng
+   * thẳng `DRAFT → PUBLISHED` được ngay sau đó.
+   *
+   * Chỉ ảnh hưởng bản ghi TẠO MỚI từ đây trở đi; dữ liệu cũ giữ nguyên.
+   */
+  async create(dto: CreateProjectDto) {
     try {
       return await this.prisma.project.create({
         data: {
@@ -121,8 +130,11 @@ export class ProjectsService {
           quickFacts: json(dto.quickFacts),
           gallerySections: json(dto.gallerySections),
           mapLocation: json(dto.mapLocation),
-          // SUPER_ADMIN bỏ qua luồng duyệt → dự án xuất bản ngay; vai trò khác nháp.
-          contentStatus: initialContentStatus(actorRole),
+          // Trạng thái xuất bản do SERVER đặt, ghi SAU `...dto` nên payload
+          // không chèn được vào (`forbidNonWhitelisted` đã chặn từ tầng DTO).
+          // `status` trong `...dto` là tình trạng thi công của dự án — chuyện
+          // khác hẳn, người dùng vẫn tự đặt bình thường.
+          contentStatus: ContentStatus.DRAFT,
         } satisfies Prisma.ProjectCreateInput,
       });
     } catch (error) {

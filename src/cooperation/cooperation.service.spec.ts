@@ -73,22 +73,36 @@ describe('CooperationService', () => {
     return data;
   }
 
-  describe('create — trạng thái khởi tạo do server đặt', () => {
-    it.each([
-      [Role.EDITOR, ContentStatus.DRAFT],
-      [Role.ADMIN, ContentStatus.DRAFT],
-      // Hành vi HIỆN TẠI, cố ý giữ nguyên trong bản vá bảo mật này.
-      [Role.SUPER_ADMIN, ContentStatus.PUBLISHED],
-    ])('%s tạo → contentStatus %s', async (role, expected) => {
-      await service.create(dto, role);
+  describe('create — mọi vai trò đều ra bản nháp', () => {
+    /**
+     * `create()` không còn nhận `actorRole`: trạng thái khởi tạo là hằng số,
+     * không phụ thuộc ai bấm nút. Trước batch chuẩn hoá, SUPER_ADMIN tạo là dự
+     * án hiện ngay ở trang chủ.
+     */
+    it.each([Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN])(
+      '%s tạo → contentStatus DRAFT',
+      async () => {
+        await service.create(dto);
 
-      expect(dataOf(prisma.cooperationProject.create).contentStatus).toBe(
-        expected,
-      );
+        expect(dataOf(prisma.cooperationProject.create).contentStatus).toBe(
+          ContentStatus.DRAFT,
+        );
+      },
+    );
+
+    it('trạng thái mô tả bằng chữ (`status`) vẫn do người dùng đặt', async () => {
+      await service.create(dto);
+
+      expect(dataOf(prisma.cooperationProject.create).status).toMatchObject({
+        vi: 'Đang triển khai',
+      });
     });
 
-    it('không có vai trò (gọi nội bộ) → nháp, không tự công khai', async () => {
-      await service.create(dto);
+    it('payload KHÔNG chèn được contentStatus (server ghi đè sau `...dto`)', async () => {
+      await service.create({
+        ...dto,
+        contentStatus: ContentStatus.PUBLISHED,
+      } as never);
 
       expect(dataOf(prisma.cooperationProject.create).contentStatus).toBe(
         ContentStatus.DRAFT,

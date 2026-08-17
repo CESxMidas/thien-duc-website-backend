@@ -56,6 +56,19 @@ export class CooperationService {
     });
   }
 
+  /**
+   * Sửa NỘI DUNG — cố ý không đụng tới `contentStatus`.
+   *
+   * `...dto` được spread thẳng xuống Prisma, nên bất cứ field nào lọt vào DTO
+   * cũng ghi được xuống DB. Đó chính là cách `contentStatus` từng biến route
+   * này (mở cho EDITOR) thành đường đăng bài tắt, bỏ qua `updateStatus` và
+   * `assertContentStatusTransition`. Chốt chặn nằm ở sự VẮNG MẶT của field
+   * trong `CreateCooperationProjectDto` cộng `forbidNonWhitelisted`; khoá lại
+   * bằng `cooperation-status-write-block.spec.ts`.
+   *
+   * Thêm field mới vào DTO nội dung thì cân nhắc: nó có phải thứ EDITOR được
+   * phép tự quyết không? Trạng thái xuất bản thì KHÔNG.
+   */
   async update(id: string, dto: UpdateCooperationProjectDto) {
     await this.findOne(id);
     return this.prisma.cooperationProject.update({
@@ -68,6 +81,11 @@ export class CooperationService {
         partner: json(dto.partner),
         scale: json(dto.scale),
         status: json(dto.status),
+        // Lớp chốt thứ hai, đặt SAU `...dto` nên luôn thắng: sửa nội dung không
+        // bao giờ đổi trạng thái xuất bản. `undefined` = Prisma giữ nguyên cột.
+        // DTO đã không còn field này, nhưng phòng thủ không nên phụ thuộc vào
+        // việc một DTO ở file khác mãi mãi giữ đúng hình dạng.
+        contentStatus: undefined,
       } satisfies Prisma.CooperationProjectUpdateInput,
     });
   }

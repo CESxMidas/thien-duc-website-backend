@@ -103,12 +103,26 @@ export class ProjectsController {
     return this.projectsService.create(dto);
   }
 
+  /**
+   * Sửa nội dung dự án. Vai trò đã xác thực đi xuống service vì `@Roles` không
+   * nhìn thấy `contentStatus` của bản ghi đang sửa (§7).
+   */
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa nội dung dự án.',
+    description:
+      'EDITOR chỉ sửa được dự án ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403. ' +
+      'ADMIN và SUPER_ADMIN sửa được ở mọi trạng thái. Payload không nhận `contentStatus`.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug')
-  update(@Param('slug') slug: string, @Body() dto: UpdateProjectDto) {
-    return this.projectsService.update(slug, dto);
+  update(
+    @Param('slug') slug: string,
+    @Body() dto: UpdateProjectDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.projectsService.update(slug, dto, user.role);
   }
 
   @ApiBearerAuth()
@@ -137,15 +151,35 @@ export class ProjectsController {
 
   /* ----------------------------- Hạng mục con ----------------------------- */
 
+  // Hạng mục và ảnh thư viện KHÔNG có trạng thái xuất bản riêng — chúng hiển thị
+  // công khai vì dự án cha hiển thị công khai. Nên mọi lệnh ghi bên dưới đều
+  // truyền vai trò đã xác thực xuống service để chốt theo `contentStatus` của
+  // CHA: chặn `PATCH /projects/:slug` mà bỏ ngỏ nhóm route này thì EDITOR vẫn
+  // đổi được nội dung đang chạy trên website qua đường vòng.
+
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Thêm hạng mục vào dự án.',
+    description:
+      'EDITOR chỉ thêm được khi dự án cha ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403. ADMIN trở lên không đổi.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Post(':slug/items')
-  createItem(@Param('slug') slug: string, @Body() dto: CreateProjectItemDto) {
-    return this.projectsService.createItem(slug, dto);
+  createItem(
+    @Param('slug') slug: string,
+    @Body() dto: CreateProjectItemDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.projectsService.createItem(slug, dto, user.role);
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa hạng mục dự án.',
+    description:
+      'EDITOR chỉ sửa được khi dự án cha ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403. ADMIN trở lên không đổi.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/items/:itemSlug')
@@ -153,16 +187,21 @@ export class ProjectsController {
     @Param('slug') slug: string,
     @Param('itemSlug') itemSlug: string,
     @Body() dto: UpdateProjectItemDto,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.projectsService.updateItem(slug, itemSlug, dto);
+    return this.projectsService.updateItem(slug, itemSlug, dto, user.role);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @Delete(':slug/items/:itemSlug')
-  removeItem(@Param('slug') slug: string, @Param('itemSlug') itemSlug: string) {
-    return this.projectsService.removeItem(slug, itemSlug);
+  removeItem(
+    @Param('slug') slug: string,
+    @Param('itemSlug') itemSlug: string,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.projectsService.removeItem(slug, itemSlug, user.role);
   }
 
   /* ------------------------------- Thư viện ảnh ---------------------------- */
@@ -171,6 +210,8 @@ export class ProjectsController {
   @ApiOperation({
     summary:
       'Thêm ảnh vào thư viện. Truyền `itemSlug` để gắn ảnh vào một hạng mục con.',
+    description:
+      'EDITOR chỉ thêm được khi dự án cha ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403. ADMIN trở lên không đổi.',
   })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
@@ -178,20 +219,34 @@ export class ProjectsController {
   addGalleryImage(
     @Param('slug') slug: string,
     @Body() dto: CreateGalleryImageDto,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.projectsService.addGalleryImage(slug, dto);
+    return this.projectsService.addGalleryImage(slug, dto, user.role);
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Sắp xếp lại toàn bộ thư viện ảnh của dự án.' })
+  @ApiOperation({
+    summary: 'Sắp xếp lại toàn bộ thư viện ảnh của dự án.',
+    description:
+      'Thứ tự ảnh là nội dung công khai (ảnh đầu tiên là ảnh người xem thấy trước), nên EDITOR chỉ sắp xếp được khi dự án cha chưa xuất bản.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/gallery/reorder')
-  reorderGallery(@Param('slug') slug: string, @Body() dto: ReorderGalleryDto) {
-    return this.projectsService.reorderGallery(slug, dto.imageIds);
+  reorderGallery(
+    @Param('slug') slug: string,
+    @Body() dto: ReorderGalleryDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.projectsService.reorderGallery(slug, dto.imageIds, user.role);
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa một ảnh trong thư viện (mô tả, thứ tự, hạng mục gắn kèm).',
+    description:
+      'EDITOR chỉ sửa được khi dự án cha ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug/gallery/:imageId')
@@ -199,18 +254,30 @@ export class ProjectsController {
     @Param('slug') slug: string,
     @Param('imageId') imageId: string,
     @Body() dto: UpdateGalleryImageDto,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.projectsService.updateGalleryImage(slug, imageId, dto);
+    return this.projectsService.updateGalleryImage(
+      slug,
+      imageId,
+      dto,
+      user.role,
+    );
   }
 
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xóa một ảnh khỏi thư viện dự án.',
+    description:
+      'EDITOR chỉ xóa được khi dự án cha ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Delete(':slug/gallery/:imageId')
   removeGalleryImage(
     @Param('slug') slug: string,
     @Param('imageId') imageId: string,
+    @CurrentUser() user: { role: string },
   ) {
-    return this.projectsService.removeGalleryImage(slug, imageId);
+    return this.projectsService.removeGalleryImage(slug, imageId, user.role);
   }
 }

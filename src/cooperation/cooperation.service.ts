@@ -7,6 +7,10 @@ import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
 import { assertContentStatusTransition } from '../common/content-approval';
+import {
+  assertContentEditAllowed,
+  editorMayEditUnpublished,
+} from '../common/content-editing';
 import { CreateCooperationProjectDto } from './dto/create-cooperation-project.dto';
 import { UpdateCooperationProjectDto } from './dto/update-cooperation-project.dto';
 
@@ -62,7 +66,17 @@ export class CooperationService {
   }
 
   /**
-   * Sửa NỘI DUNG — cố ý không đụng tới `contentStatus`.
+   * Sửa NỘI DUNG — cố ý không đụng tới `contentStatus`, và chỉ cho phép khi vai
+   * trò + trạng thái hiện tại cho phép.
+   *
+   * Hai chốt khác nhau, cùng nằm ở đây:
+   *
+   * 1. **Không ghi được `contentStatus`** (Batch 6, đoạn dưới) — sửa nội dung
+   *    không bao giờ là lệnh xuất bản.
+   * 2. **Không sửa được nội dung đã xuất bản** nếu là EDITOR (batch này) — nạp
+   *    bản ghi → chốt quyền → mới ghi. `status` (trạng thái mô tả bằng CHỮ của
+   *    dự án) vẫn sửa bình thường ở các trạng thái được phép; nó không phải
+   *    trạng thái xuất bản.
    *
    * `...dto` được spread thẳng xuống Prisma, nên bất cứ field nào lọt vào DTO
    * cũng ghi được xuống DB. Đó chính là cách `contentStatus` từng biến route
@@ -74,8 +88,17 @@ export class CooperationService {
    * Thêm field mới vào DTO nội dung thì cân nhắc: nó có phải thứ EDITOR được
    * phép tự quyết không? Trạng thái xuất bản thì KHÔNG.
    */
-  async update(id: string, dto: UpdateCooperationProjectDto) {
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateCooperationProjectDto,
+    actorRole?: string,
+  ) {
+    const project = await this.findOne(id);
+    assertContentEditAllowed(
+      actorRole,
+      editorMayEditUnpublished(project.contentStatus),
+      'Dự án hợp tác đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.',
+    );
     return this.prisma.cooperationProject.update({
       where: { id },
       data: {

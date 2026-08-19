@@ -8,6 +8,7 @@ import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
 import { assertContentStatusTransition } from '../common/content-approval';
+import { assertContentEditAllowed } from '../common/content-editing';
 import { isPubliclyVisible, publiclyVisibleWhere } from '../common/publication';
 import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
@@ -99,6 +100,48 @@ function isActiveFutureSchedule(post: SchedulableState, now: Date): boolean {
 function hasHistoricalPublication(post: SchedulableState, now: Date): boolean {
   return post.publishedAt !== null && !isActiveFutureSchedule(post, now);
 }
+
+/**
+ * **EDITOR có được sửa NỘI DUNG bài này không?** (Vị từ riêng của News, ghép vào
+ * bậc thang vai trò dùng chung ở `assertContentEditAllowed`.)
+ *
+ * Cho phép đúng hai trạng thái — nội dung còn thật sự đang trong khâu biên tập:
+ *
+ * - **A. Nháp chưa từng công khai**: `DRAFT` + `publishedAt = NULL`.
+ * - **B. Đang chờ duyệt, chưa được hẹn giờ**: `PENDING` + không mốc nào. Cố ý
+ *   vẫn mở: bắt EDITOR nhờ ADMIN cho từng lỗi chính tả trong lúc bài còn nằm ở
+ *   hàng chờ là siết quá tay, vì chưa có ai duyệt gì để mà phá vỡ.
+ *
+ * Chặn mọi tổ hợp còn lại, trong đó ba trường hợp là lý do batch này tồn tại:
+ *
+ * - **Đã lên lịch (chưa tới hạn)** và **lịch đã tới hạn nhưng reconciler chưa
+ *   chạy**: đây là bản ADMIN đã uỷ quyền cho một lần đăng. Sửa nó là đổi nội
+ *   dung sẽ tự ra công khai — đúng lỗ hổng 07:59.
+ * - **Nháp TỪNG đăng** (`DRAFT` + `publishedAt` lịch sử): `status` một mình
+ *   nói sai. Bài đã ra ngoài, đã được index, có thể đăng lại chỉ bằng một cú
+ *   bấm. Không được "hồi sinh" quyền sửa của EDITOR chỉ vì trạng thái là DRAFT.
+ *
+ * ## Không cần đồng hồ — và đó là điểm mạnh
+ *
+ * Nhờ bất biến `scheduledAt != null ⇒ publishedAt = scheduledAt` của lệnh đặt
+ * lịch, cả "lịch tương lai" lẫn "lịch đã tới hạn" đều có `publishedAt != NULL`.
+ * Nên chỉ cần *sự tồn tại* của mốc, không cần so sánh với `now`: bất biến
+ * §12 (lịch đã đặt thì EDITOR không sửa được) đúng ở cả ba mốc thời gian —
+ * trước hạn, đúng hạn, sau hạn mà cron chưa chạy — và không lệ thuộc đồng hồ
+ * của tiến trình nào. Vế `scheduledAt === null` ở nhánh PENDING vì thế là lớp
+ * chốt thứ hai, dùng cho dữ liệu dị dạng thiếu `publishedAt`.
+ */
+function editorMayEditNews(post: SchedulableState): boolean {
+  // Có mốc công khai (dù là lịch sử thật hay lịch tương lai đã hẹn) ⇒ nội dung
+  // đã qua ranh giới duyệt/xuất bản. Hết quyền của EDITOR.
+  if (post.publishedAt !== null) return false;
+  if (post.status === ContentStatus.DRAFT) return true;
+  return post.status === ContentStatus.PENDING && post.scheduledAt === null;
+}
+
+/** Thông điệp 403 khi EDITOR sửa bài đã qua ranh giới duyệt/xuất bản. */
+const EDIT_DENIED_MESSAGE =
+  'Bài viết đã được lên lịch hoặc đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.';
 
 @Injectable()
 export class NewsService {
@@ -253,8 +296,20 @@ export class NewsService {
     }
   }
 
-  async update(slug: string, dto: UpdateNewsPostDto) {
+  /**
+   * Sửa nội dung bài viết.
+   *
+   * Thứ tự BẮT BUỘC: nạp bản ghi hiện tại → chốt quyền theo trạng thái đã lưu →
+   * mới ghi. Vai trò lấy từ token đã xác thực (controller truyền vào), không bao
+   * giờ từ payload — DTO nội dung không có, và không được có, field vai trò.
+   */
+  async update(slug: string, dto: UpdateNewsPostDto, actorRole?: string) {
     const post = await this.findBySlug(slug);
+    assertContentEditAllowed(
+      actorRole,
+      editorMayEditNews(post),
+      EDIT_DENIED_MESSAGE,
+    );
     const { eventDate, ...rest } = dto;
     try {
       return await this.prisma.newsPost.update({

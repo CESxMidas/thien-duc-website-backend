@@ -112,7 +112,11 @@ describe('CooperationService', () => {
 
   describe('update — sửa nội dung KHÔNG chạm trạng thái xuất bản', () => {
     it('sửa nội dung bình thường vẫn ghi đủ field', async () => {
-      await service.update('c1', { name: bilingual('Tên mới'), order: 3 });
+      await service.update(
+        'c1',
+        { name: bilingual('Tên mới'), order: 3 },
+        Role.EDITOR,
+      );
 
       const data = dataOf(prisma.cooperationProject.update);
       expect(data.name).toMatchObject({ vi: 'Tên mới' });
@@ -120,7 +124,7 @@ describe('CooperationService', () => {
     });
 
     it('KHÔNG bao giờ gửi giá trị contentStatus xuống Prisma', async () => {
-      await service.update('c1', { name: bilingual('Tên mới') });
+      await service.update('c1', { name: bilingual('Tên mới') }, Role.EDITOR);
 
       // `undefined` là cách Prisma hiểu "giữ nguyên cột" — khác hẳn việc ghi
       // một trạng thái mới. Khoá đúng giá trị này thay vì sự vắng mặt của khoá,
@@ -137,13 +141,93 @@ describe('CooperationService', () => {
      * hình dạng mà TypeScript nay đã cấm ở biên API.
      */
     it('payload dị dạng mang contentStatus không đăng được bài', async () => {
-      await service.update('c1', {
-        name: bilingual('Tên mới'),
-        contentStatus: ContentStatus.PUBLISHED,
-      } as never);
+      await service.update(
+        'c1',
+        {
+          name: bilingual('Tên mới'),
+          contentStatus: ContentStatus.PUBLISHED,
+        } as never,
+        Role.EDITOR,
+      );
 
       const data = dataOf(prisma.cooperationProject.update);
       expect(data.contentStatus).not.toBe(ContentStatus.PUBLISHED);
+    });
+  });
+
+  /**
+   * Batch 8 — EDITOR không sửa được dự án hợp tác ĐANG hiển thị công khai.
+   *
+   * Chốt này ĐỘC LẬP với chốt Batch 6 ở trên: Batch 6 ngăn `update` *ghi trạng
+   * thái*, batch này ngăn `update` *chạy được* khi nội dung đã qua ranh giới xuất
+   * bản. Cả hai cùng nằm trên một route nên phải cùng xanh.
+   */
+  describe('update — quyền sửa nội dung theo vai trò × trạng thái', () => {
+    function given(contentStatus: ContentStatus) {
+      prisma.cooperationProject.findUnique.mockResolvedValue({
+        id: 'c1',
+        contentStatus,
+      });
+    }
+
+    it.each([ContentStatus.DRAFT, ContentStatus.PENDING])(
+      'EDITOR sửa được dự án hợp tác %s',
+      async (contentStatus) => {
+        given(contentStatus);
+
+        await service.update('c1', { name: bilingual('Tên mới') }, Role.EDITOR);
+
+        expect(dataOf(prisma.cooperationProject.update).name).toMatchObject({
+          vi: 'Tên mới',
+        });
+      },
+    );
+
+    it('EDITOR KHÔNG sửa được dự án đã xuất bản → 403, không ghi gì', async () => {
+      given(ContentStatus.PUBLISHED);
+
+      await expect(
+        service.update('c1', { name: bilingual('Tên mới') }, Role.EDITOR),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.cooperationProject.update).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Trạng thái mô tả bằng CHỮ (`status`) vẫn sửa bình thường ở các trạng thái
+     * được phép — nó không phải trạng thái xuất bản, và batch này không được
+     * chặn lây sang nó.
+     */
+    it('EDITOR vẫn sửa được `status` (chữ) của dự án chờ duyệt', async () => {
+      given(ContentStatus.PENDING);
+
+      await service.update(
+        'c1',
+        { status: bilingual('Đã hoàn thành') },
+        Role.EDITOR,
+      );
+
+      expect(dataOf(prisma.cooperationProject.update).status).toMatchObject({
+        vi: 'Đã hoàn thành',
+      });
+    });
+
+    it.each([Role.ADMIN, Role.SUPER_ADMIN])(
+      '%s vẫn sửa được dự án đã xuất bản (luồng đính chính)',
+      async (role) => {
+        given(ContentStatus.PUBLISHED);
+
+        await service.update('c1', { name: bilingual('Tên mới') }, role);
+
+        expect(prisma.cooperationProject.update).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('thiếu vai trò → 403 (fail closed)', async () => {
+      given(ContentStatus.DRAFT);
+
+      await expect(
+        service.update('c1', { name: bilingual('Tên mới') }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 

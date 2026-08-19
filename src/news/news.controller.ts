@@ -208,12 +208,36 @@ export class NewsController {
     return this.newsService.create(dto);
   }
 
+  /**
+   * Sửa nội dung bài viết.
+   *
+   * `@Roles` chỉ nói được "vai trò nào gọi được route"; nó KHÔNG nhìn thấy trạng
+   * thái xuất bản của chính bài đang sửa. Vai trò đã xác thực vì thế phải đi
+   * xuống service, nơi có bản ghi hiện tại để chốt quyền (§7: chặn ở backend,
+   * không chỉ ẩn nút trong Admin CMS).
+   */
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa nội dung bài viết.',
+    description:
+      'EDITOR chỉ sửa được bài còn trong khâu biên tập: nháp chưa từng công khai, hoặc bài chờ duyệt chưa được hẹn giờ. ' +
+      'Bài đã lên lịch / đã tới hạn / đã đăng / nháp từng đăng trả 403 — bản mà quản trị viên đã duyệt phải là bản ra công khai. ' +
+      'ADMIN và SUPER_ADMIN sửa được ở mọi trạng thái.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'EDITOR sửa nội dung đã qua ranh giới duyệt/xuất bản.',
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy bài viết.' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug')
-  update(@Param('slug') slug: string, @Body() dto: UpdateNewsPostDto) {
-    return this.newsService.update(slug, dto);
+  update(
+    @Param('slug') slug: string,
+    @Body() dto: UpdateNewsPostDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.newsService.update(slug, dto, user.role);
   }
 
   @ApiBearerAuth()

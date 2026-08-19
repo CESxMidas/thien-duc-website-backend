@@ -89,6 +89,76 @@ describe('PagesService — vòng đời xuất bản', () => {
     });
   });
 
+  /**
+   * Batch 8 — EDITOR không sửa được trang ĐANG hiển thị công khai.
+   *
+   * Page chưa có `publishedAt`/`scheduledAt` nên không phân biệt được "nháp chưa
+   * từng đăng" với "nháp đã từng đăng rồi gỡ xuống" (xem
+   * `editorMayEditUnpublished`). Luật lấy đúng phần chắc chắn: chặn ở PUBLISHED.
+   */
+  describe('update — quyền sửa nội dung theo vai trò × trạng thái', () => {
+    function given(status: ContentStatus) {
+      prisma.page.findUnique.mockResolvedValue({
+        id: 'g1',
+        slug: 'gioi-thieu',
+        status,
+      });
+    }
+
+    it.each([ContentStatus.DRAFT, ContentStatus.PENDING])(
+      'EDITOR sửa được trang %s',
+      async (status) => {
+        given(status);
+
+        await service.update(
+          'gioi-thieu',
+          { title: { vi: 'Tiêu đề mới' } },
+          Role.EDITOR,
+        );
+
+        expect(dataOf(prisma.page.update).title).toMatchObject({
+          vi: 'Tiêu đề mới',
+        });
+      },
+    );
+
+    it('EDITOR KHÔNG sửa được trang đã xuất bản → 403, không ghi gì', async () => {
+      given(ContentStatus.PUBLISHED);
+
+      await expect(
+        service.update(
+          'gioi-thieu',
+          { title: { vi: 'Tiêu đề mới' } },
+          Role.EDITOR,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it.each([Role.ADMIN, Role.SUPER_ADMIN])(
+      '%s vẫn sửa được trang đã xuất bản (luồng đính chính)',
+      async (role) => {
+        given(ContentStatus.PUBLISHED);
+
+        await service.update(
+          'gioi-thieu',
+          { title: { vi: 'Tiêu đề mới' } },
+          role,
+        );
+
+        expect(prisma.page.update).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('thiếu vai trò → 403 (fail closed)', async () => {
+      given(ContentStatus.DRAFT);
+
+      await expect(
+        service.update('gioi-thieu', { title: { vi: 'Tiêu đề mới' } }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
   describe('updateStatus — cửa duy nhất để công khai', () => {
     it('EDITOR gửi duyệt: DRAFT → PENDING', async () => {
       await service.updateStatus(

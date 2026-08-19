@@ -77,12 +77,26 @@ export class CooperationController {
     return this.cooperationService.create(dto);
   }
 
+  /**
+   * Sửa nội dung dự án hợp tác. Vai trò đã xác thực đi xuống service vì `@Roles`
+   * không nhìn thấy `contentStatus` của bản ghi đang sửa (§7).
+   */
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa nội dung dự án hợp tác.',
+    description:
+      'EDITOR chỉ sửa được dự án ở trạng thái nháp hoặc chờ duyệt; dự án đã xuất bản trả 403. ' +
+      'ADMIN và SUPER_ADMIN sửa được ở mọi trạng thái. Payload không nhận `contentStatus`.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateCooperationProjectDto) {
-    return this.cooperationService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateCooperationProjectDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.cooperationService.update(id, dto, user.role);
   }
 
   @ApiBearerAuth()

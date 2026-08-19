@@ -7,6 +7,10 @@ import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
 import { assertContentStatusTransition } from '../common/content-approval';
+import {
+  assertContentEditAllowed,
+  editorMayEditUnpublished,
+} from '../common/content-editing';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -23,6 +27,20 @@ function isUniqueViolation(error: unknown): boolean {
 
 /** Ảnh và hạng mục luôn trả theo `order` tăng dần — thứ tự do biên tập viên đặt. */
 const BY_ORDER = { order: 'asc' } as const;
+
+/** Thông điệp 403 khi EDITOR sửa nội dung của dự án đã xuất bản. */
+const EDIT_DENIED_MESSAGE =
+  'Dự án đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.';
+
+/**
+ * Thông điệp 403 cho **nội dung con** (hạng mục, thư viện ảnh).
+ *
+ * Nói rõ hạng mục/ảnh thay vì dùng chung câu của dự án cha: người dùng đang bấm
+ * "Thêm hạng mục" mà nhận câu "không sửa được nội dung dự án" thì sẽ tưởng mình
+ * bấm sai chỗ.
+ */
+const CHILD_EDIT_DENIED_MESSAGE =
+  'Dự án đã xuất bản nên biên tập viên không sửa được hạng mục và thư viện ảnh của nó. Hãy nhờ quản trị viên.';
 
 /**
  * Các cột JSON tùy chọn: khi Admin muốn **xóa** nội dung (vd. bỏ bản đồ), payload
@@ -95,13 +113,60 @@ export class ProjectsService {
     itemSlug: string,
     publishedOnly = false,
   ) {
+    const { item } = await this.findItemWithProject(
+      projectSlug,
+      itemSlug,
+      publishedOnly,
+    );
+    return item;
+  }
+
+  /**
+   * Hạng mục **kèm dự án cha** — dùng cho các lệnh ghi cần chốt quyền theo
+   * `contentStatus` của cha.
+   *
+   * Tồn tại vì `findItemBySlug` chỉ trả hạng mục (đó là response body của route
+   * GET, không được đổi hình dạng), nhưng cha đã được nạp ngay bên trong. Trả
+   * luôn cả hai thay vì gọi `findBySlug` lần nữa: một truy vấn dư cho mỗi lệnh
+   * ghi, và tệ hơn là hai lần đọc có thể thấy hai trạng thái khác nhau.
+   */
+  private async findItemWithProject(
+    projectSlug: string,
+    itemSlug: string,
+    publishedOnly = false,
+  ) {
     const project = await this.findBySlug(projectSlug, publishedOnly);
     const item = await this.prisma.projectItem.findFirst({
       where: { projectId: project.id, slug: itemSlug },
       include: { galleryImages: { orderBy: BY_ORDER } },
     });
     if (!item) throw new NotFoundException('Không tìm thấy hạng mục dự án');
-    return item;
+    return { project, item };
+  }
+
+  /**
+   * **Chốt quyền sửa NỘI DUNG CON theo trạng thái của dự án CHA.**
+   *
+   * `ProjectItem` và `ProjectGalleryImage` không có trạng thái xuất bản riêng —
+   * chúng hiển thị công khai *vì* dự án cha hiển thị công khai. Nên quyền sửa
+   * chúng phải thừa hưởng đúng luật quản trị của cha, nếu không sẽ còn một đường
+   * vòng: chặn `PATCH /projects/:slug` nhưng vẫn cho EDITOR đổi hạng mục và ảnh
+   * của một dự án đang chạy trên website — nội dung công khai vẫn thay đổi mà
+   * không ai duyệt lại.
+   *
+   * Dùng lại đúng bậc thang vai trò của Batch 8 (`assertContentEditAllowed`) và
+   * đúng vị từ của dự án (`editorMayEditUnpublished`): không có ma trận quyền thứ
+   * hai, không so sánh vai trò rải rác ở từng lệnh con.
+   */
+  private assertChildEditAllowed(
+    contentStatus: ContentStatus,
+    actorRole?: string,
+  ): void {
+    assertContentEditAllowed(
+      actorRole,
+      editorMayEditUnpublished(contentStatus),
+      CHILD_EDIT_DENIED_MESSAGE,
+    );
   }
 
   /**
@@ -145,8 +210,24 @@ export class ProjectsService {
     }
   }
 
-  async update(slug: string, dto: UpdateProjectDto) {
+  /**
+   * Sửa nội dung dự án.
+   *
+   * Thứ tự BẮT BUỘC: nạp bản ghi → chốt quyền theo `contentStatus` đã lưu → mới
+   * ghi. EDITOR sửa được `DRAFT`/`PENDING`, không sửa được dự án đang hiển thị
+   * công khai (`PUBLISHED`); ADMIN trở lên không đổi. Xem giới hạn đã biết của
+   * ba module chưa có cột lịch sử xuất bản ở `editorMayEditUnpublished`.
+   *
+   * `status` (tình trạng thi công) vẫn sửa bình thường ở các trạng thái được
+   * phép — nó không phải trạng thái xuất bản.
+   */
+  async update(slug: string, dto: UpdateProjectDto, actorRole?: string) {
     const project = await this.findBySlug(slug);
+    assertContentEditAllowed(
+      actorRole,
+      editorMayEditUnpublished(project.contentStatus),
+      EDIT_DENIED_MESSAGE,
+    );
     // Chuẩn hóa null → Prisma.DbNull TRƯỚC, rồi bọc chính giá trị đã chuẩn hóa
     // để giữ nguyên hành vi xóa field JSON (json() là identity lúc chạy).
     const data = normalizeJsonNulls(dto);
@@ -193,8 +274,13 @@ export class ProjectsService {
 
   /* ----------------------------- Hạng mục con ----------------------------- */
 
-  async createItem(projectSlug: string, dto: CreateProjectItemDto) {
+  async createItem(
+    projectSlug: string,
+    dto: CreateProjectItemDto,
+    actorRole?: string,
+  ) {
     const project = await this.findBySlug(projectSlug);
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     try {
       return await this.prisma.projectItem.create({
         data: {
@@ -222,8 +308,16 @@ export class ProjectsService {
     projectSlug: string,
     itemSlug: string,
     dto: UpdateProjectItemDto,
+    actorRole?: string,
   ) {
-    const item = await this.findItemBySlug(projectSlug, itemSlug);
+    // Tra cứu TRƯỚC rồi mới chốt quyền: dự án hoặc hạng mục không tồn tại vẫn
+    // trả 404 y như cũ, không biến thành 403 gây hiểu sai. Phép chốt vẫn nằm
+    // trước câu ghi.
+    const { project, item } = await this.findItemWithProject(
+      projectSlug,
+      itemSlug,
+    );
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     try {
       return await this.prisma.projectItem.update({
         where: { id: item.id },
@@ -247,8 +341,17 @@ export class ProjectsService {
     }
   }
 
-  async removeItem(projectSlug: string, itemSlug: string) {
-    const item = await this.findItemBySlug(projectSlug, itemSlug);
+  /**
+   * Xóa hạng mục. Route đang chốt `@Roles(ADMIN, SUPER_ADMIN)` nên EDITOR không
+   * tới được đây — phép chốt theo trạng thái cha vẫn đặt vào, để nếu sau này
+   * route được mở cho EDITOR thì luật quản trị đã có sẵn, không phải nhớ thêm.
+   */
+  async removeItem(projectSlug: string, itemSlug: string, actorRole?: string) {
+    const { project, item } = await this.findItemWithProject(
+      projectSlug,
+      itemSlug,
+    );
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     await this.prisma.projectItem.delete({ where: { id: item.id } });
     return { deleted: true };
   }
@@ -267,8 +370,13 @@ export class ProjectsService {
    * Thêm một ảnh vào thư viện dự án. `itemSlug` gắn ảnh vào hạng mục con —
    * hạng mục phải thuộc đúng dự án này (findItemBySlug đã kiểm tra).
    */
-  async addGalleryImage(projectSlug: string, dto: CreateGalleryImageDto) {
+  async addGalleryImage(
+    projectSlug: string,
+    dto: CreateGalleryImageDto,
+    actorRole?: string,
+  ) {
     const project = await this.findBySlug(projectSlug);
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     const projectItemId = dto.itemSlug
       ? (await this.findItemBySlug(projectSlug, dto.itemSlug)).id
       : null;
@@ -291,8 +399,13 @@ export class ProjectsService {
     projectSlug: string,
     imageId: string,
     dto: UpdateGalleryImageDto,
+    actorRole?: string,
   ) {
-    const image = await this.findGalleryImage(projectSlug, imageId);
+    const { project, image } = await this.findGalleryImage(
+      projectSlug,
+      imageId,
+    );
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     const projectItemId =
       dto.itemSlug === undefined
         ? undefined
@@ -311,8 +424,16 @@ export class ProjectsService {
     });
   }
 
-  async removeGalleryImage(projectSlug: string, imageId: string) {
-    const image = await this.findGalleryImage(projectSlug, imageId);
+  async removeGalleryImage(
+    projectSlug: string,
+    imageId: string,
+    actorRole?: string,
+  ) {
+    const { project, image } = await this.findGalleryImage(
+      projectSlug,
+      imageId,
+    );
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     await this.prisma.projectGalleryImage.delete({ where: { id: image.id } });
     return { deleted: true };
   }
@@ -321,8 +442,16 @@ export class ProjectsService {
    * Sắp xếp lại thư viện theo danh sách id truyền lên (kéo-thả ở Admin CMS).
    * Chạy trong transaction: thứ tự hiển thị không được rơi vào trạng thái nửa vời.
    */
-  async reorderGallery(projectSlug: string, imageIds: string[]) {
+  async reorderGallery(
+    projectSlug: string,
+    imageIds: string[],
+    actorRole?: string,
+  ) {
     const project = await this.findBySlug(projectSlug);
+    // Sắp xếp lại thư viện ĐỔI nội dung công khai của dự án: thứ tự ảnh là thứ
+    // tự hiển thị trên trang chi tiết, và ảnh đầu tiên là ảnh người xem thấy
+    // trước. Nên nó chịu cùng luật với thêm/sửa/xóa ảnh.
+    this.assertChildEditAllowed(project.contentStatus, actorRole);
     const owned = await this.prisma.projectGalleryImage.findMany({
       where: { projectId: project.id },
       select: { id: true },
@@ -352,14 +481,19 @@ export class ProjectsService {
     return this.findGallery(projectSlug);
   }
 
-  /** Ảnh phải thuộc đúng dự án trên URL — chặn sửa/xóa chéo dự án. */
+  /**
+   * Ảnh phải thuộc đúng dự án trên URL — chặn sửa/xóa chéo dự án.
+   *
+   * Trả **cả dự án cha**: các lệnh ghi cần `contentStatus` của cha để chốt quyền,
+   * và cha đã được nạp ở đây rồi.
+   */
   private async findGalleryImage(projectSlug: string, imageId: string) {
     const project = await this.findBySlug(projectSlug);
     const image = await this.prisma.projectGalleryImage.findFirst({
       where: { id: imageId, projectId: project.id },
     });
     if (!image) throw new NotFoundException('Không tìm thấy ảnh trong dự án');
-    return image;
+    return { project, image };
   }
 
   private async nextGalleryOrder(projectId: string): Promise<number> {

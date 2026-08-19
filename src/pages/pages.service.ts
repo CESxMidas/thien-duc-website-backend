@@ -7,6 +7,10 @@ import { ContentStatus, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
 import { assertContentStatusTransition } from '../common/content-approval';
+import {
+  assertContentEditAllowed,
+  editorMayEditUnpublished,
+} from '../common/content-editing';
 import { CreatePageDto } from './dto/create-page.dto';
 import { UpdatePageDto } from './dto/update-page.dto';
 
@@ -62,8 +66,21 @@ export class PagesService {
     }
   }
 
-  async update(slug: string, dto: UpdatePageDto) {
+  /**
+   * Sửa nội dung trang.
+   *
+   * Thứ tự BẮT BUỘC: nạp bản ghi → chốt quyền theo `status` đã lưu → mới ghi.
+   * EDITOR sửa được trang nháp/chờ duyệt, không sửa được trang đang hiển thị
+   * công khai; ADMIN trở lên không đổi. Xem giới hạn đã biết của ba module chưa
+   * có cột lịch sử xuất bản ở `editorMayEditUnpublished`.
+   */
+  async update(slug: string, dto: UpdatePageDto, actorRole?: string) {
     const page = await this.findBySlug(slug);
+    assertContentEditAllowed(
+      actorRole,
+      editorMayEditUnpublished(page.status),
+      'Trang đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.',
+    );
     try {
       return await this.prisma.page.update({
         where: { id: page.id },

@@ -66,12 +66,26 @@ export class PagesController {
     return this.pagesService.create(dto);
   }
 
+  /**
+   * Sửa nội dung trang. Vai trò đã xác thực đi xuống service vì `@Roles` không
+   * nhìn thấy `status` của bản ghi đang sửa (§7).
+   */
   @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Sửa nội dung trang.',
+    description:
+      'EDITOR chỉ sửa được trang ở trạng thái nháp hoặc chờ duyệt; trang đã xuất bản trả 403. ' +
+      'ADMIN và SUPER_ADMIN sửa được ở mọi trạng thái. Payload không nhận `status`.',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.EDITOR, Role.ADMIN, Role.SUPER_ADMIN)
   @Patch(':slug')
-  update(@Param('slug') slug: string, @Body() dto: UpdatePageDto) {
-    return this.pagesService.update(slug, dto);
+  update(
+    @Param('slug') slug: string,
+    @Body() dto: UpdatePageDto,
+    @CurrentUser() user: { role: string },
+  ) {
+    return this.pagesService.update(slug, dto, user.role);
   }
 
   @ApiBearerAuth()

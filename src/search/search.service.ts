@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { newsPubliclyVisibleSql } from '../common/publication';
+import {
+  newsPubliclyVisibleSql,
+  projectPubliclyVisibleSql,
+} from '../common/publication';
 import { SearchQueryDto } from './dto/search-query.dto';
 
 /** Chỉ cần id + rank từ SQL thô; phần dữ liệu lấy lại bằng Prisma. */
@@ -12,11 +15,13 @@ export class SearchService {
 
   async search({ q, type, limit }: SearchQueryDto) {
     // Một mốc thời gian cho cả lượt tìm kiếm — hai nhánh không được nhìn thấy
-    // hai thời điểm khác nhau. Hiện chỉ News dùng tới; Projects chưa có lịch
-    // đăng nên vẫn lọc theo `content_status` như cũ (batch riêng của nó).
+    // hai thời điểm khác nhau. Từ Batch 9, CẢ HAI loại nội dung đều có lịch đăng
+    // nên cùng dùng một `now`.
     const now = new Date();
     const [projects, news] = await Promise.all([
-      type === 'news' ? Promise.resolve([]) : this.searchProjects(q, limit),
+      type === 'news'
+        ? Promise.resolve([])
+        : this.searchProjects(q, limit, now),
       type === 'projects'
         ? Promise.resolve([])
         : this.searchNews(q, limit, now),
@@ -28,7 +33,7 @@ export class SearchService {
    * Hai bước: SQL thô lọc + xếp hạng (dùng index GIN), rồi Prisma nạp lại bản
    * ghi với cùng `include` như `GET /projects` để frontend tái dùng mapper sẵn có.
    */
-  private async searchProjects(q: string, limit: number) {
+  private async searchProjects(q: string, limit: number, now: Date) {
     // SEC-INJ-001: Use plainto_tsquery instead of websearch_to_tsquery to prevent FTS operator injection
     // plainto_tsquery treats input as plain text (no operator parsing), protecting against query manipulation
     //
@@ -38,10 +43,17 @@ export class SearchService {
     // `${q}` vẫn là tham số bind của Prisma — không nối chuỗi, không SQL injection.
     // Qualify `public.` cho đồng bộ với migration: tên không qualify phụ thuộc
     // `search_path` của kết nối, đúng thứ đã làm CI đỏ ở tầng CREATE INDEX.
+    //
+    // Điều kiện hiển thị lấy từ `projectPubliclyVisibleSql` thay vì gõ lại
+    // `content_status = 'PUBLISHED'`: đây là truy vấn dự án duy nhất bằng SQL
+    // thô, nên `where` của Prisma không với tới — và cũng vì thế nó là chỗ dễ bị
+    // bỏ quên nhất khi luật hiển thị đổi. Trước Batch 9 chỗ này hardcode trạng
+    // thái, nên một dự án đã tới hạn lên lịch sẽ hiện ở danh sách công khai mà
+    // tìm kiếm lại không thấy.
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT p."id"
       FROM "projects" p, plainto_tsquery('simple', public.immutable_unaccent(${q})) AS query
-      WHERE p."content_status" = 'PUBLISHED'::"ContentStatus"
+      WHERE ${projectPubliclyVisibleSql(now)}
         AND project_search_document(
               p."title", p."summary", p."description", p."category", p."location"
             ) @@ query

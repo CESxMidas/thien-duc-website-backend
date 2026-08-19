@@ -19,6 +19,9 @@ import { CreateProjectDto } from './dto/create-project.dto';
  * Quyền hạn KHÔNG bị siết: ADMIN và SUPER_ADMIN vẫn đăng thẳng được ngay sau
  * khi tạo — chỉ là phải nói ra ý định đó.
  */
+/** Mốc quá khứ dùng cho các bản ghi đã từng công khai. */
+const PAST = new Date('2026-08-01T01:00:00.000Z');
+
 const dto: CreateProjectDto = {
   slug: 'du-an-moi',
   title: { vi: 'Dự án', en: 'Project' },
@@ -47,6 +50,9 @@ describe('ProjectsService — vòng đời xuất bản', () => {
           id: 'p1',
           slug: 'du-an-moi',
           contentStatus: ContentStatus.DRAFT,
+          // Batch 9: dự án mang thêm hai mốc xuất bản. Mặc định là nháp sạch.
+          scheduledAt: null,
+          publishedAt: null,
         }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -108,11 +114,11 @@ describe('ProjectsService — vòng đời xuất bản', () => {
   });
 
   /**
-   * Batch 8 — EDITOR không sửa được nội dung ĐANG hiển thị công khai.
+   * EDITOR không sửa được nội dung ĐANG hiển thị công khai (Batch 8).
    *
-   * Project chưa có `publishedAt`/`scheduledAt` nên không phân biệt được "nháp
-   * chưa từng đăng" với "nháp đã từng đăng rồi gỡ xuống" (xem
-   * `editorMayEditUnpublished`). Luật lấy đúng phần chắc chắn: chặn ở PUBLISHED.
+   * Ma trận đầy đủ có thêm lịch đăng — nháp từng đăng, lịch tương lai, lịch đã
+   * tới hạn — nằm ở `projects-editor-edit.service.spec.ts` (Batch 9). Ở đây chỉ
+   * giữ ba trạng thái gốc để bộ test vòng đời này đọc liền mạch.
    */
   describe('update — quyền sửa nội dung theo vai trò × trạng thái', () => {
     /** Nạp một `contentStatus` vào "DB". */
@@ -121,6 +127,8 @@ describe('ProjectsService — vòng đời xuất bản', () => {
         id: 'p1',
         slug: 'du-an-moi',
         contentStatus,
+        scheduledAt: null,
+        publishedAt: contentStatus === ContentStatus.PUBLISHED ? PAST : null,
       });
     }
 
@@ -209,6 +217,8 @@ describe('ProjectsService — vòng đời xuất bản', () => {
           id: 'p1',
           slug: 'du-an-moi',
           contentStatus: ContentStatus.PENDING,
+          scheduledAt: null,
+          publishedAt: null,
         });
 
         await service.updateStatus('du-an-moi', ContentStatus.PUBLISHED, role);
@@ -222,17 +232,33 @@ describe('ProjectsService — vòng đời xuất bản', () => {
 
   describe('hiển thị công khai', () => {
     /**
-     * Điểm mấu chốt của batch này: dự án SUPER_ADMIN vừa tạo phải RIÊNG TƯ.
-     * Route công khai lọc `contentStatus = PUBLISHED`, nên một bản ghi DRAFT
-     * không thể lọt ra ngoài.
+     * Điểm mấu chốt của batch chuẩn hoá: dự án SUPER_ADMIN vừa tạo phải RIÊNG
+     * TƯ. Một bản ghi DRAFT không khớp nhánh nào của vị từ hiển thị.
      */
-    it('route công khai chỉ lấy dự án PUBLISHED', async () => {
+    /**
+     * Batch 9: route công khai không còn lọc bằng một giá trị enum mà bằng **vị
+     * từ hiển thị hiệu dụng** — `PUBLISHED` HOẶC (`PENDING` + lịch đã tới hạn).
+     * Ràng buộc `PENDING` ở nhánh hai là chốt bảo mật: thiếu nó, một hàng dị
+     * dạng `DRAFT` + lịch quá khứ sẽ lọt ra công khai.
+     */
+    it('route công khai dùng vị từ hiển thị hiệu dụng', async () => {
       await service.findAll(true);
 
       const [{ where }] = prisma.project.findMany.mock.calls[0] as [
-        { where?: { contentStatus?: ContentStatus } },
+        { where?: { OR?: Record<string, unknown>[] } },
       ];
-      expect(where?.contentStatus).toBe(ContentStatus.PUBLISHED);
+      const branches = where?.OR ?? [];
+      expect(branches).toHaveLength(2);
+      expect(branches[0]).toEqual({
+        contentStatus: ContentStatus.PUBLISHED,
+      });
+      expect(branches[1].contentStatus).toBe(ContentStatus.PENDING);
+      const scheduled = branches[1].scheduledAt as {
+        not: null;
+        lte: Date;
+      };
+      expect(scheduled.not).toBeNull();
+      expect(scheduled.lte).toBeInstanceOf(Date);
     });
 
     it('dự án vừa tạo (DRAFT) không xem được qua route công khai', async () => {

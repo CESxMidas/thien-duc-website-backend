@@ -8,7 +8,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client';
 import { UpdateContentStatusDto } from '../common/dto/update-content-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -19,15 +24,44 @@ import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ReorderGalleryDto } from './dto/reorder-gallery.dto';
+import { ScheduleProjectPublicationDto } from './dto/schedule-project-publication.dto';
 import { UpdateGalleryImageDto } from './dto/update-gallery-image.dto';
 import { UpdateProjectItemDto } from './dto/update-project-item.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { ProjectsSchedulerService } from './projects-scheduler.service';
 import { ProjectsService } from './projects.service';
 
 @ApiTags('projects')
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    private readonly projectsSchedulerService: ProjectsSchedulerService,
+  ) {}
+
+  /**
+   * Kích hoạt thủ công lượt đăng dự án theo lịch. Cron nội bộ chỉ chạy khi tiến
+   * trình còn sống — Render free tier ngủ sau 15 phút không có request, nên cần
+   * một cron ngoài (UptimeRobot, cron-job.org) gọi route này.
+   *
+   * Route riêng cho dự án, song song với `POST /news/publish-scheduled`: gộp hai
+   * bảng vào một endpoint "đồng bộ tất cả" nghe gọn hơn nhưng làm mất khả năng
+   * chạy/giám sát riêng từng loại nội dung, và biến một lỗi ở một bảng thành lỗi
+   * của cả lượt.
+   *
+   * Cron và route này gọi CÙNG một phương thức service — không có câu SQL thứ hai.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Đăng ngay các dự án đã tới hạn `scheduledAt`.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('publish-scheduled')
+  async publishScheduled() {
+    const published = await this.projectsSchedulerService.publishDueProjects();
+    return { published: published.length, projects: published };
+  }
 
   @ApiOperation({ summary: 'Danh sách dự án đã xuất bản (website công khai).' })
   @Get()
@@ -139,6 +173,66 @@ export class ProjectsController {
     @CurrentUser() user: { role: string },
   ) {
     return this.projectsService.updateStatus(slug, dto.status, user.role);
+  }
+
+  /**
+   * Đặt / đổi lịch đăng. Route LỆNH riêng, không đi qua `PATCH :slug` — sửa nội
+   * dung và uỷ quyền đăng trong tương lai là hai việc khác nhau, khác cả quyền.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Đặt hoặc đổi lịch đăng dự án. Chỉ ADMIN trở lên.',
+    description:
+      'Đặt lịch tương đương uỷ quyền cho một lần đăng trong tương lai nên chốt quyền y như "Đăng ngay". ' +
+      'Ghi nguyên tử `contentStatus = PENDING`, `scheduledAt` và `publishedAt` cùng bằng mốc đã hẹn. ' +
+      'Chỉ dành cho lần công khai ĐẦU TIÊN. `scheduledAt` bắt buộc kèm múi giờ tường minh (`Z` hoặc `±HH:MM`), ' +
+      'cách hiện tại tối thiểu 1 phút và tối đa 2 năm.',
+  })
+  @ApiResponse({ status: 200, description: 'Đã đặt lịch.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Mốc thời gian sai định dạng, thiếu múi giờ, quá gần (<1 phút) hoặc quá xa (>2 năm).',
+  })
+  @ApiResponse({ status: 403, description: 'EDITOR không được đặt lịch.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy dự án.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Dự án đang đăng công khai, hoặc đã từng được đăng.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch(':slug/schedule')
+  schedulePublication(
+    @Param('slug') slug: string,
+    @Body() dto: ScheduleProjectPublicationDto,
+  ) {
+    return this.projectsService.schedulePublication(slug, dto.scheduledAt);
+  }
+
+  /**
+   * Huỷ lịch đăng CHƯA tới hạn. Lịch đã qua giờ nghĩa là dự án đang công khai
+   * (vị từ hiển thị), gỡ nó xuống là việc của `PATCH :slug/status`.
+   */
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Huỷ lịch đăng dự án chưa tới hạn. Chỉ ADMIN trở lên.',
+    description:
+      'Đưa dự án về `DRAFT`, xoá `scheduledAt` và `publishedAt` (mốc chưa từng thành sự thật). ' +
+      'Lịch ĐÃ qua giờ bị từ chối 409: khi đó dự án đã hiển thị công khai, dùng "Trả về nháp" để gỡ xuống.',
+  })
+  @ApiResponse({ status: 200, description: 'Đã huỷ lịch, dự án về nháp.' })
+  @ApiResponse({ status: 403, description: 'EDITOR không được huỷ lịch.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy dự án.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Dự án không có lịch, hoặc lịch đã qua giờ đăng.',
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Delete(':slug/schedule')
+  cancelScheduledPublication(@Param('slug') slug: string) {
+    return this.projectsService.cancelScheduledPublication(slug);
   }
 
   @ApiBearerAuth()

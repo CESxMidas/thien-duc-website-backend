@@ -125,12 +125,23 @@ describe('ProjectsService — nội dung con thừa hưởng quyền của dự 
     service = moduleRef.get(ProjectsService);
   });
 
-  /** Nạp dự án cha với một `contentStatus` cho trước. */
-  function givenParent(contentStatus: ContentStatus) {
+  /**
+   * Nạp dự án cha với một trạng thái xuất bản cho trước.
+   *
+   * Từ Batch 9 bản ghi cha mang thêm `publishedAt`/`scheduledAt`, và vị từ quyền
+   * sửa đọc cả hai. Mặc định là dự án CHƯA từng công khai, chưa có lịch — đúng
+   * hình dạng Prisma trả về cho một dự án mới tạo.
+   */
+  function givenParent(
+    contentStatus: ContentStatus,
+    schedule: { scheduledAt?: Date | null; publishedAt?: Date | null } = {},
+  ) {
     prisma.project.findUnique.mockResolvedValue({
       id: 'p1',
       slug: 'du-an',
       contentStatus,
+      scheduledAt: schedule.scheduledAt ?? null,
+      publishedAt: schedule.publishedAt ?? null,
       items: [],
       galleryImages: [],
     });
@@ -230,6 +241,73 @@ describe('ProjectsService — nội dung con thừa hưởng quyền của dự 
       await expect(mutation.run(service, role)).resolves.toBeDefined();
       expect(writeCalls()).toBeGreaterThan(0);
     });
+  });
+
+  /**
+   * **Batch 9 — phần siết mới.** Trước khi dự án có lịch đăng, EDITOR sửa được
+   * mọi `PENDING`. Nay một dự án ĐÃ ĐƯỢC LÊN LỊCH vẫn lưu là `PENDING`, nên luật
+   * cũ sẽ mở lại đúng lỗ hổng 07:59 — lần này trên dự án và trên cả nội dung con
+   * của nó.
+   */
+  describe('cha đã qua ranh giới duyệt/xuất bản — EDITOR bị chặn', () => {
+    const FUTURE = new Date('2099-08-20T01:00:00.000Z');
+    const PAST = new Date('2026-08-01T01:00:00.000Z');
+
+    const parents = [
+      [
+        'lịch tương lai',
+        ContentStatus.PENDING,
+        { scheduledAt: FUTURE, publishedAt: FUTURE },
+      ],
+      [
+        'lịch đã tới hạn',
+        ContentStatus.PENDING,
+        { scheduledAt: PAST, publishedAt: PAST },
+      ],
+      [
+        'nháp từng đăng',
+        ContentStatus.DRAFT,
+        { scheduledAt: null, publishedAt: PAST },
+      ],
+    ] as const;
+
+    it.each(
+      parents.flatMap(([label, status, schedule]) =>
+        CHILD_MUTATIONS.map(
+          (mutation) =>
+            [
+              `${label} — ${mutation.name}`,
+              status,
+              schedule,
+              mutation,
+            ] as const,
+        ),
+      ),
+    )('%s → 403, không ghi gì', async (_label, status, schedule, mutation) => {
+      givenParent(status, schedule);
+
+      await expect(mutation.run(service, Role.EDITOR)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(writeCalls()).toBe(0);
+    });
+
+    it.each(
+      parents.flatMap(([label, status, schedule]) =>
+        [Role.ADMIN, Role.SUPER_ADMIN].map(
+          (role) => [`${label} (${role})`, status, schedule, role] as const,
+        ),
+      ),
+    )(
+      '%s: quản trị vẫn sửa được hạng mục',
+      async (_l, status, schedule, role) => {
+        givenParent(status, schedule);
+
+        await expect(
+          service.updateItem('du-an', 'hang-muc', {}, role),
+        ).resolves.toBeDefined();
+      },
+    );
   });
 
   describe('nguồn vai trò', () => {

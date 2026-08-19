@@ -1,14 +1,19 @@
 import { Test } from '@nestjs/testing';
 import { ContentStatus, Prisma } from '../../generated/prisma/client';
-import { isPubliclyVisible } from '../common/publication';
+import {
+  isProjectPubliclyVisible,
+  isPubliclyVisible,
+} from '../common/publication';
 import { PrismaService } from '../prisma/prisma.service';
 import { SearchService } from './search.service';
 
 /**
  * Tìm kiếm là bề mặt công khai **dễ bỏ quên nhất** khi luật hiển thị đổi: nó là
- * truy vấn tin duy nhất viết bằng SQL thô, nên một helper `where` của Prisma
- * không chạm tới được. Bỏ sót ở đây nghĩa là bài chưa tới giờ vẫn tìm ra được
- * qua ô tìm kiếm dù mọi trang khác đã ẩn nó.
+ * nơi duy nhất truy vấn nội dung bằng SQL thô, nên một helper `where` của Prisma
+ * không chạm tới được. Bỏ sót ở đây nghĩa là nội dung chưa tới giờ vẫn tìm ra
+ * được qua ô tìm kiếm dù mọi trang khác đã ẩn nó — hoặc ngược lại, nội dung đã
+ * tới hạn thì hiện ở danh sách mà tìm kiếm lại không thấy (đúng thứ Batch 9 vá
+ * cho dự án).
  *
  * Bài test kiểm hai tầng:
  *  1. Câu SQL mà SearchService thật sự gửi đi có mang đủ mệnh đề hay không.
@@ -103,21 +108,36 @@ describe('SearchService — tin đã lên lịch', () => {
       expect(scheduleAt).toBeGreaterThan(pendingAt);
     });
 
-    it('KHÔNG đổi điều kiện của Dự án — Projects thuộc batch sau', async () => {
+    /**
+     * Batch 9: Dự án nay CŨNG có lịch đăng, nên nhánh dự án phải mang đúng vị từ
+     * hiển thị hiệu dụng thay vì hardcode trạng thái. Trước batch này chỗ đó ghi
+     * cứng `content_status = 'PUBLISHED'`, khiến một dự án đã tới hạn lên lịch
+     * hiện ở danh sách công khai nhưng tìm kiếm lại không thấy.
+     */
+    it('Dự án dùng vị từ hiển thị hiệu dụng, kèm ràng buộc PENDING', async () => {
       await service.search({ q: 'thiên đức', type: 'projects', limit: 10 });
 
       const sql = flatSqlAt(0);
       expect(sql).toContain(`p."content_status" = 'PUBLISHED'`);
-      expect(sql).not.toContain('scheduled_at');
+      expect(sql).toContain(`p."content_status" = 'PENDING'`);
+      expect(sql).toContain('p."scheduled_at" IS NOT NULL');
+      // Thứ tự quan trọng: nhánh lịch phải nằm SAU ràng buộc PENDING, không
+      // được đứng một mình (nếu không, DRAFT + lịch quá khứ sẽ lọt).
+      const pendingAt = sql.indexOf(`p."content_status" = 'PENDING'`);
+      const scheduleAt = sql.indexOf('p."scheduled_at" IS NOT NULL');
+      expect(pendingAt).toBeGreaterThan(-1);
+      expect(scheduleAt).toBeGreaterThan(pendingAt);
     });
 
     it('một lượt tìm kiếm gộp chỉ dùng MỘT mốc thời gian', async () => {
       await service.search({ q: 'thiên đức', type: 'all', limit: 10 });
 
-      // Hai nhánh chạy song song; chỉ nhánh tin mang `now`, và đúng một giá trị.
+      // Hai nhánh chạy song song và nay CẢ HAI đều mang `now` — nhưng phải là
+      // **cùng một** mốc, nếu không hai loại nội dung có thể thấy hai thời điểm
+      // khác nhau ngay tại giây đáo hạn.
       const allBinds = [...bindValuesAt(0), ...bindValuesAt(1)];
       const dates = allBinds.filter((value) => value instanceof Date);
-      expect(dates).toEqual([NOW]);
+      expect(dates).toEqual([NOW, NOW]);
     });
   });
 
@@ -151,6 +171,50 @@ describe('SearchService — tin đã lên lịch', () => {
       ],
     ])('%s', (_label, status, scheduledAt, expected) => {
       expect(isPubliclyVisible({ status, scheduledAt }, NOW)).toBe(expected);
+    });
+  });
+
+  /**
+   * **Batch 9 — cùng ma trận đó cho DỰ ÁN.**
+   *
+   * Trước batch này nhánh dự án của search hardcode `content_status =
+   * 'PUBLISHED'`, nên một dự án đã tới hạn lên lịch hiện ở trang danh sách công
+   * khai nhưng ô tìm kiếm lại không thấy — hai bề mặt công khai nói hai điều
+   * khác nhau về cùng một bản ghi.
+   */
+  describe('ma trận trạng thái dự án trong kết quả tìm kiếm', () => {
+    it.each([
+      ['PUBLISHED → có trong kết quả', ContentStatus.PUBLISHED, null, true],
+      [
+        'PENDING + lịch tương lai → bị loại',
+        ContentStatus.PENDING,
+        FUTURE,
+        false,
+      ],
+      [
+        'PENDING + lịch ĐÚNG giây đáo hạn → có trong kết quả',
+        ContentStatus.PENDING,
+        NOW,
+        true,
+      ],
+      [
+        'PENDING + lịch đã qua, chưa đồng bộ → có trong kết quả',
+        ContentStatus.PENDING,
+        PAST,
+        true,
+      ],
+      ['PENDING không có lịch → bị loại', ContentStatus.PENDING, null, false],
+      [
+        'DRAFT + lịch quá hạn (dị dạng) → bị loại',
+        ContentStatus.DRAFT,
+        PAST,
+        false,
+      ],
+      ['DRAFT sạch → bị loại', ContentStatus.DRAFT, null, false],
+    ])('%s', (_label, contentStatus, scheduledAt, expected) => {
+      expect(
+        isProjectPubliclyVisible({ contentStatus, scheduledAt }, NOW),
+      ).toBe(expected);
     });
   });
 });

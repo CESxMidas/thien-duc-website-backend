@@ -44,7 +44,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'project & news';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -62,7 +62,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = '!secret';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -80,7 +80,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'thienduc:5';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -99,7 +99,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
         },
       ]);
 
-      const result = await service['searchProjects'](payload, 10);
+      const result = await service['searchProjects'](payload, 10, new Date());
 
       expect(result).toHaveLength(1);
       expect(mockQueryRaw).toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = '';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      const result = await service['searchProjects'](payload, 10);
+      const result = await service['searchProjects'](payload, 10, new Date());
 
       expect(result).toEqual([]);
     });
@@ -119,7 +119,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const limit = 5;
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, limit);
+      await service['searchProjects'](payload, limit, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -128,7 +128,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'test';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -139,7 +139,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = "test' OR '1'='1";
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });
@@ -148,7 +148,7 @@ describe('SearchService - SQL Injection Protection (SEC-INJ-001)', () => {
       const payload = 'test--';
       mockQueryRaw.mockResolvedValueOnce([]);
 
-      await service['searchProjects'](payload, 10);
+      await service['searchProjects'](payload, 10, new Date());
 
       expect(mockQueryRaw).toHaveBeenCalled();
     });

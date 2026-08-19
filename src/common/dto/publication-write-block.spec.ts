@@ -1,4 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { CreateProjectDto } from '../../projects/dto/create-project.dto';
 import { UpdateProjectDto } from '../../projects/dto/update-project.dto';
 import { CreatePageDto } from '../../pages/dto/create-page.dto';
@@ -17,11 +19,11 @@ import { ProjectStatus } from '../../../generated/prisma/client';
  * Chốt chặn là sự VẮNG MẶT của field trong DTO cộng `forbidNonWhitelisted` —
  * cùng cơ chế, cùng độ mong manh, nên cùng cần test khoá lại.
  *
- * Lưu ý về **chiều sâu phòng thủ**: `CooperationService.update()` còn ghi
- * `contentStatus: undefined` sau `...dto` làm lớp chốt thứ hai;
- * `ProjectsService.update()` và `PagesService.update()` thì KHÔNG — chúng chỉ có
- * đúng một lớp là ValidationPipe. Batch 8 không đổi điều đó (ngoài phạm vi), nên
- * spec này chính là thứ canh lớp duy nhất ấy.
+ * Lưu ý về **chiều sâu phòng thủ**: `CooperationService.update()` và (từ Batch
+ * 9) `ProjectsService.update()` còn ghi tường minh `undefined` cho các cột xuất
+ * bản sau `...dto`, làm lớp chốt thứ hai. `PagesService.update()` thì KHÔNG —
+ * trang nội dung chỉ có đúng một lớp là ValidationPipe, nên phần Page của spec
+ * này chính là thứ canh lớp duy nhất ấy.
  */
 
 /** Đúng cấu hình pipe toàn cục ở `src/main.ts`. */
@@ -46,7 +48,7 @@ const validPage = {
   content: [bilingual('Nội dung trang.')],
 };
 
-describe('Project — contentStatus không ghi được qua API nội dung chung', () => {
+describe('Project — cột xuất bản không ghi được qua API nội dung chung', () => {
   it.each([
     ['CreateProjectDto (POST /projects)', CreateProjectDto],
     ['UpdateProjectDto (PATCH /projects/:slug)', UpdateProjectDto],
@@ -90,6 +92,70 @@ describe('Project — contentStatus không ghi được qua API nội dung chung
         { type: 'body', metatype: UpdateProjectDto },
       ),
     ).resolves.toMatchObject({ title: { vi: 'Tên mới' } });
+  });
+
+  /**
+   * **Batch 9.** Dự án nay có `scheduled_at` và `published_at`. Cùng một lý do
+   * đã vá ở tin tức: `POST /projects` và `PATCH /projects/:slug` mở cho EDITOR,
+   * nên nếu DTO nhận `scheduledAt` thì EDITOR chỉ cần gửi một mốc ở quá khứ là
+   * reconciler đăng bài giúp — leo thang quyền, bỏ qua trọn vẹn luồng duyệt.
+   * Lịch đăng phải đi qua đúng một cửa: `PATCH /projects/:slug/schedule`
+   * (`@Roles(ADMIN, SUPER_ADMIN)`).
+   */
+  it.each([
+    ['scheduledAt', { scheduledAt: '2026-08-20T08:00:00+07:00' }],
+    ['publishedAt', { publishedAt: '2026-08-20T08:00:00+07:00' }],
+  ])('%s bị từ chối ở cả create lẫn update', async (_label, extra) => {
+    for (const metatype of [CreateProjectDto, UpdateProjectDto]) {
+      await expect(
+        pipe.transform(
+          { ...validProject, ...extra },
+          { type: 'body', metatype },
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+    }
+  });
+
+  it('payload khai thác thật (chỉ mỗi scheduledAt qua PATCH) bị chặn 400', async () => {
+    await expect(
+      pipe.transform(
+        { scheduledAt: '2020-01-01T00:00:00+07:00' },
+        { type: 'body', metatype: UpdateProjectDto },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('thông báo lỗi chỉ đích danh `scheduledAt`', async () => {
+    expect.assertions(1);
+    try {
+      await pipe.transform(
+        { ...validProject, scheduledAt: '2026-08-20T08:00:00+07:00' },
+        { type: 'body', metatype: CreateProjectDto },
+      );
+    } catch (error) {
+      const response = (
+        error as { getResponse(): { message: string[] } }
+      ).getResponse();
+      expect(response.message.join(' ')).toContain('scheduledAt');
+    }
+  });
+
+  /**
+   * Chốt này KHÔNG được vơ đũa cả nắm: `eventDate`-kiểu field ngày của nội dung
+   * vẫn phải ghi được. Ở dự án, thứ tương đương là `status` (tình trạng thi
+   * công) — đã có test riêng ở trên — và các field nội dung thường.
+   */
+  it('field `scheduledAt` không tồn tại trên DTO (không phải chỉ bị bỏ qua)', () => {
+    const instance = plainToInstance(CreateProjectDto, {
+      ...validProject,
+      scheduledAt: '2026-08-20T08:00:00+07:00',
+    });
+
+    const errors = validateSync(instance, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    expect(errors.some((error) => error.property === 'scheduledAt')).toBe(true);
   });
 });
 

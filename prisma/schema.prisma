@@ -175,6 +175,11 @@ model Project {
   description     Json?
   status          ProjectStatus
   contentStatus   ContentStatus @default(DRAFT) @map("content_status")
+  // Mốc công khai LẦN ĐẦU và lịch hẹn đăng — cùng ngữ nghĩa với `news_posts`.
+  // `publishedAt` KHÔNG bị ghi đè bởi các lần đăng lại hay bởi giờ cron chạy.
+  // Bất biến của lệnh đặt lịch: `scheduledAt != null ⇒ publishedAt = scheduledAt`.
+  publishedAt     DateTime?     @map("published_at")
+  scheduledAt     DateTime?     @map("scheduled_at")
   location        Json?
   image           String?
   gallery         String[]

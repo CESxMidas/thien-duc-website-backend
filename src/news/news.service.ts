@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -9,6 +8,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { json } from '../common/prisma-json';
 import { assertContentStatusTransition } from '../common/content-approval';
 import { assertContentEditAllowed } from '../common/content-editing';
+import {
+  assertScheduleWindow,
+  MAX_SCHEDULE_HORIZON_MS,
+  MIN_SCHEDULE_LEAD_MS,
+} from '../common/schedule-window';
 import { isPubliclyVisible, publiclyVisibleWhere } from '../common/publication';
 import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
@@ -37,11 +41,12 @@ function clearedSchedule(next: ContentStatus): null | undefined {
     : undefined;
 }
 
-/** Lịch phải cách hiện tại ít nhất chừng này — dưới ngưỡng thì dùng "Đăng ngay". */
-export const MIN_SCHEDULE_LEAD_MS = 60_000;
-
-/** Trần 2 năm — chủ yếu để bắt lỗi gõ nhầm năm, thứ hay xảy ra nhất. */
-export const MAX_SCHEDULE_HORIZON_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+/**
+ * Hai ngưỡng của cửa sổ hẹn giờ nay nằm ở `common/schedule-window.ts` vì dự án
+ * (Batch 9) dùng đúng luật này. Re-export để mọi import sẵn có — kể cả
+ * `news-schedule-command.service.spec.ts` — không phải đổi đường dẫn.
+ */
+export { MAX_SCHEDULE_HORIZON_MS, MIN_SCHEDULE_LEAD_MS };
 
 /**
  * Bài đã **thật sự** ra công khai bao giờ chưa?
@@ -440,17 +445,7 @@ export class NewsService {
       );
     }
 
-    const leadMs = scheduledAt.getTime() - now.getTime();
-    if (leadMs < MIN_SCHEDULE_LEAD_MS) {
-      throw new BadRequestException(
-        'Thời điểm đăng phải ở tương lai, cách hiện tại ít nhất 1 phút. Dùng "Đăng ngay" nếu muốn đăng lúc này.',
-      );
-    }
-    if (leadMs > MAX_SCHEDULE_HORIZON_MS) {
-      throw new BadRequestException(
-        'Thời điểm đăng quá xa (tối đa 2 năm). Hãy kiểm tra lại năm.',
-      );
-    }
+    assertScheduleWindow(scheduledAt, now);
 
     return this.prisma.newsPost.update({
       where: { id: post.id },

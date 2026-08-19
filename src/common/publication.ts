@@ -107,3 +107,81 @@ export function newsPubliclyVisibleSql(now: Date): Prisma.Sql {
     )
   )`;
 }
+
+/* -------------------------------------------------------------------------
+   DỰ ÁN — hàm chị em của ba hàm trên.
+
+   Cố ý KHÔNG gộp thành một hàm generic nhận tên cột: `NewsPost` gọi cột trạng
+   thái là `status`, `Project` gọi là `contentStatus` (và `Project.status` lại
+   là TÌNH TRẠNG THI CÔNG — một khái niệm hoàn toàn khác). Một hàm nhận tên cột
+   dạng chuỗi sẽ vứt bỏ đúng thứ đang bảo vệ ta ở đây: kiểu `Prisma.*WhereInput`
+   bắt lỗi ngay lúc biên dịch nếu ai đó nhắm nhầm cột. Ba hàm ngắn, đọc thẳng
+   ra luật, hơn một lớp trừu tượng khiến `Project.status` có cơ hội lọt vào một
+   vị từ xuất bản.
+   ------------------------------------------------------------------------- */
+
+/** Hình dạng tối thiểu để xét hiển thị của một dự án. */
+export interface PublishableProject {
+  contentStatus: ContentStatus;
+  scheduledAt: Date | null;
+}
+
+/**
+ * Mảnh `where` cho Prisma trên bảng `projects` — dùng cho MỌI truy vấn công
+ * khai (danh sách, chi tiết, section trang chủ).
+ *
+ * Luật giống hệt tin tức, chỉ khác tên cột:
+ *
+ * ```
+ * contentStatus = PUBLISHED
+ * HOẶC (contentStatus = PENDING AND scheduled_at IS NOT NULL AND scheduled_at <= now)
+ * ```
+ *
+ * Ràng buộc `PENDING` ở nhánh hai là chốt bảo mật, không phải chi tiết thừa:
+ * bỏ nó đi thì một hàng dị dạng `DRAFT` + `scheduled_at` quá khứ sẽ lọt ra
+ * công khai. Rủi ro của việc bỏ sót phải là "hiện muộn", không phải "rò rỉ sớm".
+ */
+export function projectPubliclyVisibleWhere(
+  now: Date,
+): Prisma.ProjectWhereInput {
+  return {
+    OR: [
+      { contentStatus: ContentStatus.PUBLISHED },
+      {
+        contentStatus: ContentStatus.PENDING,
+        scheduledAt: { not: null, lte: now },
+      },
+    ],
+  };
+}
+
+/** Vị từ trên bản ghi dự án đã nạp — dùng cho `findUnique` rồi mới quyết định 404. */
+export function isProjectPubliclyVisible(
+  project: PublishableProject,
+  now: Date,
+): boolean {
+  if (project.contentStatus === ContentStatus.PUBLISHED) return true;
+
+  return (
+    project.contentStatus === ContentStatus.PENDING &&
+    project.scheduledAt !== null &&
+    project.scheduledAt.getTime() <= now.getTime()
+  );
+}
+
+/**
+ * Mảnh SQL cho `search.service.ts` — nơi duy nhất truy vấn dự án bằng SQL thô.
+ *
+ * Cố định alias `p` cho khớp `FROM "projects" p` trong SearchService. `${now}`
+ * đi qua bind parameter của `Prisma.sql` — không nối chuỗi, không SQL injection.
+ */
+export function projectPubliclyVisibleSql(now: Date): Prisma.Sql {
+  return Prisma.sql`(
+    p."content_status" = 'PUBLISHED'::"ContentStatus"
+    OR (
+      p."content_status" = 'PENDING'::"ContentStatus"
+      AND p."scheduled_at" IS NOT NULL
+      AND p."scheduled_at" <= ${now}
+    )
+  )`;
+}

@@ -127,6 +127,106 @@ describe('contentStatus không ghi được qua API nội dung chung (hồi quy 
     ).resolves.toMatchObject({ order: 3 });
   });
 
+  /* ---------------------------------------------------------------------
+     Batch 10 — hai cột mốc lịch đăng chịu ĐÚNG chốt chặn đó.
+
+     `publishedAt` và `scheduledAt` là cột do SERVER sở hữu y như
+     `contentStatus`: ai ghi được chúng qua route nội dung thì ghi được cả thời
+     điểm nội dung ra công khai. Lệnh hợp lệ duy nhất là
+     `PATCH /cooperation/:id/schedule` (chốt `@Roles(ADMIN, SUPER_ADMIN)`).
+
+     Chốt chặn vẫn là sự VẮNG MẶT của field trong DTO cộng `forbidNonWhitelisted`
+     — nên nó cũng dễ bị vô hiệu hoá bởi một lần "thêm cho tiện" y như cũ.
+     --------------------------------------------------------------------- */
+
+  it.each([
+    [
+      'CreateCooperationProjectDto (POST /cooperation)',
+      CreateCooperationProjectDto,
+    ],
+    [
+      'UpdateCooperationProjectDto (PATCH /cooperation/:id)',
+      UpdateCooperationProjectDto,
+    ],
+  ])('%s từ chối payload có scheduledAt', async (_label, metatype) => {
+    await expect(
+      pipe.transform(
+        { ...validProject, scheduledAt: '2026-08-20T08:00:00+07:00' },
+        { type: 'body', metatype },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it.each([
+    [
+      'CreateCooperationProjectDto (POST /cooperation)',
+      CreateCooperationProjectDto,
+    ],
+    [
+      'UpdateCooperationProjectDto (PATCH /cooperation/:id)',
+      UpdateCooperationProjectDto,
+    ],
+  ])('%s từ chối payload có publishedAt', async (_label, metatype) => {
+    await expect(
+      pipe.transform(
+        { ...validProject, publishedAt: '2026-08-20T08:00:00+07:00' },
+        { type: 'body', metatype },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  /**
+   * Hình dạng khai thác thật: gửi MỖI `scheduledAt` qua PATCH để tự hẹn giờ
+   * đăng cho bản nháp của mình, bỏ qua chốt ADMIN+ của route lịch.
+   */
+  it('payload khai thác thật (chỉ mỗi scheduledAt, qua PATCH) bị chặn ở tầng 400', async () => {
+    await expect(
+      pipe.transform(
+        { scheduledAt: '2026-08-20T08:00:00+07:00' },
+        { type: 'body', metatype: UpdateCooperationProjectDto },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('cả ba cột xuất bản cùng lúc → vẫn 400, và nêu đích danh từng field', async () => {
+    expect.assertions(3);
+    try {
+      await pipe.transform(
+        {
+          ...validProject,
+          contentStatus: 'PUBLISHED',
+          scheduledAt: '2026-08-20T08:00:00+07:00',
+          publishedAt: '2026-08-20T08:00:00+07:00',
+        },
+        { type: 'body', metatype: UpdateCooperationProjectDto },
+      );
+    } catch (error) {
+      const response = (
+        error as { getResponse(): { message: string[] } }
+      ).getResponse();
+      const message = response.message.join(' ');
+      expect(message).toContain('contentStatus');
+      expect(message).toContain('scheduledAt');
+      expect(message).toContain('publishedAt');
+    }
+  });
+
+  it.each(['scheduledAt', 'publishedAt'])(
+    'field `%s` không tồn tại trên DTO (không phải chỉ bị bỏ qua ở service)',
+    (field) => {
+      const instance = plainToInstance(CreateCooperationProjectDto, {
+        ...validProject,
+        [field]: '2026-08-20T08:00:00+07:00',
+      });
+
+      const errors = validateSync(instance, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      expect(errors.some((error) => error.property === field)).toBe(true);
+    },
+  );
+
   it('field `contentStatus` không còn tồn tại trên DTO (không phải chỉ bị bỏ qua ở service)', () => {
     const instance = plainToInstance(CreateCooperationProjectDto, {
       ...validProject,

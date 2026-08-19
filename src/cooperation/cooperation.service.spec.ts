@@ -50,6 +50,10 @@ describe('CooperationService', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           contentStatus: ContentStatus.DRAFT,
+          // Batch 10: bản ghi thật luôn mang hai cột mốc. Stub thiếu chúng thì
+          // vị từ quyền sửa đọc `undefined !== null` và chặn nhầm.
+          scheduledAt: null,
+          publishedAt: null,
         }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -167,6 +171,10 @@ describe('CooperationService', () => {
       prisma.cooperationProject.findUnique.mockResolvedValue({
         id: 'c1',
         contentStatus,
+        // Chưa từng công khai, chưa hẹn giờ — ca cơ bản của Batch 8. Các ca có
+        // lịch/lịch sử nằm ở `cooperation-editor-edit.service.spec.ts`.
+        scheduledAt: null,
+        publishedAt: null,
       });
     }
 
@@ -254,6 +262,8 @@ describe('CooperationService', () => {
         prisma.cooperationProject.findUnique.mockResolvedValue({
           id: 'c1',
           contentStatus: ContentStatus.PENDING,
+          scheduledAt: null,
+          publishedAt: null,
         });
 
         await service.updateStatus('c1', ContentStatus.PUBLISHED, role);
@@ -270,6 +280,10 @@ describe('CooperationService', () => {
         prisma.cooperationProject.findUnique.mockResolvedValue({
           id: 'c1',
           contentStatus: ContentStatus.PUBLISHED,
+          scheduledAt: null,
+          // Dữ liệu cũ trước Batch 10: đang đăng nhưng không có mốc. Gỡ về nháp
+          // KHÔNG được bịa ra lịch sử — xem ca đầy đủ ở spec Publish Now.
+          publishedAt: null,
         });
 
         await service.updateStatus('c1', ContentStatus.DRAFT, role);
@@ -282,13 +296,30 @@ describe('CooperationService', () => {
   });
 
   describe('hiển thị công khai', () => {
-    it('route công khai chỉ lấy bài PUBLISHED', async () => {
+    /**
+     * Batch 10 đổi vị từ từ `contentStatus = PUBLISHED` sang luật hai nhánh dùng
+     * chung. Test khoá đúng HÌNH DẠNG đó: nhánh lịch **phải** kèm `PENDING`, vì
+     * thiếu nó thì hàng dị dạng `DRAFT` + lịch quá khứ lọt ra trang chủ.
+     */
+    it('route công khai dùng vị từ hiển thị hai nhánh (đã đăng HOẶC lịch đã tới hạn)', async () => {
       await service.findAll(true);
 
       const [{ where }] = prisma.cooperationProject.findMany.mock.calls[0] as [
-        { where?: { contentStatus?: ContentStatus } },
+        {
+          where?: {
+            OR?: {
+              contentStatus?: ContentStatus;
+              scheduledAt?: { not: null; lte: Date };
+            }[];
+          };
+        },
       ];
-      expect(where?.contentStatus).toBe(ContentStatus.PUBLISHED);
+      const branches = where?.OR ?? [];
+      expect(branches).toHaveLength(2);
+      expect(branches[0]).toEqual({ contentStatus: ContentStatus.PUBLISHED });
+      expect(branches[1]?.contentStatus).toBe(ContentStatus.PENDING);
+      expect(branches[1]?.scheduledAt?.lte).toBeInstanceOf(Date);
+      expect(branches[1]?.scheduledAt?.not).toBeNull();
     });
 
     it('route Admin thấy mọi trạng thái', async () => {

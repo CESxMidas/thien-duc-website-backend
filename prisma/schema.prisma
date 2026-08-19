@@ -319,6 +319,16 @@ model CooperationProject {
   // trang chủ hiện ảnh khi có, không có thì lùi về nền thương hiệu như cũ.
   image         String?
   contentStatus ContentStatus @default(DRAFT) @map("content_status")
+  // Mốc công khai LẦN ĐẦU và lịch hẹn đăng (Batch 10) — cùng ngữ nghĩa với
+  // `news_posts` và `projects`. `publishedAt` KHÔNG bị ghi đè bởi lần đăng lại
+  // hay bởi giờ cron chạy. Bất biến của lệnh đặt lịch:
+  // `scheduledAt != null ⇒ publishedAt = scheduledAt`.
+  //
+  // CHÚ Ý: `status` ở trên là trạng thái mô tả bằng CHỮ (song ngữ, vd "Đã bàn
+  // giao") — không phải bậc thang duyệt. Mọi luật lịch/xuất bản dùng
+  // `contentStatus`.
+  publishedAt   DateTime?     @map("published_at")
+  scheduledAt   DateTime?     @map("scheduled_at")
   order         Int           @default(0)
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")

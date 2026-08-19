@@ -185,3 +185,65 @@ export function projectPubliclyVisibleSql(now: Date): Prisma.Sql {
     )
   )`;
 }
+
+/* -------------------------------------------------------------------------
+   DỰ ÁN HỢP TÁC — hàm chị em, cùng luật, khác kiểu `where` của Prisma.
+
+   Vì sao lại thêm một cặp hàm nữa thay vì dùng lại của Dự án: `where` phải mang
+   đúng kiểu `Prisma.CooperationProjectWhereInput` thì TypeScript mới bắt được
+   lỗi nhắm nhầm cột. Và ở model này việc nhắm nhầm cột là rủi ro THẬT, không
+   phải giả định: `CooperationProject.status` là JSONB mô tả bằng chữ (song ngữ,
+   vd. {"vi":"Đã bàn giao"}), trong khi bậc thang duyệt là `contentStatus`. Một
+   hàm generic nhận tên cột dạng chuỗi sẽ vứt bỏ đúng lớp bảo vệ đó.
+
+   KHÔNG có bản `...Sql`: dự án hợp tác không nằm trong tìm kiếm (SearchService
+   chỉ truy vấn `projects` và `news_posts` bằng SQL thô), nên không có chỗ nào
+   cần mảnh SQL. Thêm một hàm không ai gọi chỉ tạo thêm thứ để lệch nhau.
+   ------------------------------------------------------------------------- */
+
+/** Hình dạng tối thiểu để xét hiển thị của một dự án hợp tác. */
+export interface PublishableCooperationProject {
+  contentStatus: ContentStatus;
+  scheduledAt: Date | null;
+}
+
+/**
+ * Mảnh `where` cho Prisma trên bảng `cooperation_projects` — dùng cho MỌI truy
+ * vấn công khai. Hiện chỉ có một: `GET /cooperation` (section "Dự án hợp tác"
+ * ở trang chủ).
+ *
+ * ```
+ * contentStatus = PUBLISHED
+ * HOẶC (contentStatus = PENDING AND scheduled_at IS NOT NULL AND scheduled_at <= now)
+ * ```
+ *
+ * Ràng buộc `PENDING` ở nhánh hai là chốt bảo mật: bỏ nó đi thì một hàng dị
+ * dạng `DRAFT` + `scheduled_at` quá khứ sẽ lọt ra công khai.
+ */
+export function cooperationPubliclyVisibleWhere(
+  now: Date,
+): Prisma.CooperationProjectWhereInput {
+  return {
+    OR: [
+      { contentStatus: ContentStatus.PUBLISHED },
+      {
+        contentStatus: ContentStatus.PENDING,
+        scheduledAt: { not: null, lte: now },
+      },
+    ],
+  };
+}
+
+/** Vị từ trên bản ghi đã nạp — dùng khi đã `findUnique` rồi mới quyết định. */
+export function isCooperationPubliclyVisible(
+  project: PublishableCooperationProject,
+  now: Date,
+): boolean {
+  if (project.contentStatus === ContentStatus.PUBLISHED) return true;
+
+  return (
+    project.contentStatus === ContentStatus.PENDING &&
+    project.scheduledAt !== null &&
+    project.scheduledAt.getTime() <= now.getTime()
+  );
+}

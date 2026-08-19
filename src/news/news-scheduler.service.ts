@@ -82,6 +82,15 @@ export class NewsSchedulerService {
    * Nguyên tắc: **tập bài reconciler được phép đăng phải là tập con của tập bài
    * vị từ hiển thị coi là công khai.** `status = 'PENDING'` làm hai bên khớp
    * nhau đúng từng điều kiện một.
+   *
+   * ## Mốc thời gian phải ở hệ quy chiếu UTC
+   *
+   * `scheduled_at`/`published_at`/`updated_at` là `timestamp WITHOUT time zone`
+   * và Prisma ghi **giờ UTC** vào đó. `NOW()` trả `timestamptz`, nên khi so hoặc
+   * gán, Postgres quy đổi theo `TimeZone` của phiên — trên DB không phải UTC,
+   * `NOW()` trần làm bài đăng SỚM đúng bằng offset múi giờ (đo được: +7 giờ trên
+   * phiên `Asia/Bangkok`). `NOW() AT TIME ZONE 'utc'` đưa "bây giờ" về đúng hệ
+   * quy chiếu của cột.
    */
   async publishDuePosts(): Promise<PublishedRow[]> {
     return this.prisma.$queryRaw<PublishedRow[]>`
@@ -89,10 +98,10 @@ export class NewsSchedulerService {
       SET "status" = 'PUBLISHED'::"ContentStatus",
           "published_at" = COALESCE("published_at", "scheduled_at"),
           "scheduled_at" = NULL,
-          "updated_at" = NOW()
+          "updated_at" = (NOW() AT TIME ZONE 'utc')
       WHERE "status" = 'PENDING'::"ContentStatus"
         AND "scheduled_at" IS NOT NULL
-        AND "scheduled_at" <= NOW()
+        AND "scheduled_at" <= (NOW() AT TIME ZONE 'utc')
       RETURNING "id", "slug"
     `;
   }

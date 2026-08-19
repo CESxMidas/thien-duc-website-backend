@@ -60,7 +60,7 @@ describe('ProjectsSchedulerService', () => {
       await service.publishDueProjects();
 
       expect(sql()).toContain('"scheduled_at" IS NOT NULL');
-      expect(sql()).toContain('"scheduled_at" <= NOW()');
+      expect(sql()).toContain(`"scheduled_at" <= (NOW() AT TIME ZONE 'utc')`);
     });
   });
 

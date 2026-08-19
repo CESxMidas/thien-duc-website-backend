@@ -77,12 +77,12 @@ describe('NewsSchedulerService', () => {
       await expect(service.publishDuePosts()).resolves.toEqual([]);
     });
 
-    it('chỉ đăng bài đã TỚI HẠN (`scheduled_at <= NOW()`), không đăng bài hẹn tương lai', async () => {
+    it("chỉ đăng bài đã TỚI HẠN (`scheduled_at <= NOW() AT TIME ZONE 'utc'`), không đăng bài hẹn tương lai", async () => {
       prisma.$queryRaw.mockResolvedValue([]);
       await service.publishDuePosts();
 
       const sql = sqlAt(prisma.$queryRaw, 0);
-      expect(sql).toContain('"scheduled_at" <= NOW()');
+      expect(sql).toContain(`"scheduled_at" <= (NOW() AT TIME ZONE 'utc')`);
       // Mốc so sánh phải là đồng hồ của Postgres, không phải của tiến trình
       // Node — hai instance backend trên Render mới không bất đồng vài giây.
       expect(sql).not.toContain('$1');
@@ -125,7 +125,7 @@ describe('NewsSchedulerService', () => {
       // Ba mệnh đề, khớp một-một. Lệch một cái là hai tầng bất đồng nhau.
       expect(sql).toContain(`"status" = 'PENDING'`);
       expect(sql).toContain('"scheduled_at" IS NOT NULL');
-      expect(sql).toContain('"scheduled_at" <= NOW()');
+      expect(sql).toContain(`"scheduled_at" <= (NOW() AT TIME ZONE 'utc')`);
     });
 
     it('không ghi đè `published_at` đã có — giữ mốc đăng lần đầu', async () => {

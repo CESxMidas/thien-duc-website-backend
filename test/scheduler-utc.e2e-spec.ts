@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { NewsSchedulerService } from '../src/news/news-scheduler.service';
 import { ProjectsSchedulerService } from '../src/projects/projects-scheduler.service';
 import { CooperationSchedulerService } from '../src/cooperation/cooperation-scheduler.service';
+import { PagesSchedulerService } from '../src/pages/pages-scheduler.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -322,6 +323,92 @@ describe('Reconciler đăng theo lịch — hồi quy múi giờ (PostgreSQL th�
       expect(seen.draftPast.contentStatus).toBe('DRAFT');
       expect(seen.draftPast.scheduledAt).not.toBeNull();
 
+      expect(seen.secondCount).toBe(0);
+    });
+  });
+  describe('Trang nội dung', () => {
+    it('không đăng sớm bản hẹn tương lai, đăng đúng bản tới hạn, bỏ qua dị dạng', async () => {
+      const seen = await inBangkokTx(async (tx, now) => {
+        const mk = (
+          slug: string,
+          status: 'DRAFT' | 'PENDING' | 'PUBLISHED',
+          scheduledAt: Date | null,
+          publishedAt: Date | null,
+        ) =>
+          tx.page.create({
+            data: {
+              slug,
+              title: vi(slug),
+              content: [vi('Nội dung.')],
+              status,
+              scheduledAt,
+              publishedAt,
+            },
+          });
+
+        const future = new Date(now.getTime() + HOUR_MS);
+        const past = new Date(now.getTime() - HOUR_MS);
+
+        await mk('tz-future', 'PENDING', future, future);
+        await mk('tz-due', 'PENDING', past, past);
+        await mk('tz-draft-past', 'DRAFT', past, null);
+        await mk('tz-pending-nosched', 'PENDING', null, null);
+        await mk('tz-published', 'PUBLISHED', null, past);
+
+        const service = new PagesSchedulerService(asPrismaService(tx));
+
+        const first = await service.publishDuePages();
+        const second = await service.publishDuePages();
+
+        const rows = await tx.page.findMany({
+          where: { slug: { startsWith: 'tz-' } },
+          select: {
+            slug: true,
+            status: true,
+            scheduledAt: true,
+            publishedAt: true,
+            updatedAt: true,
+          },
+        });
+
+        return {
+          firstSlugs: first.map((r) => r.slug).sort(),
+          secondCount: second.length,
+          byslug: Object.fromEntries(rows.map((r) => [r.slug, r])),
+          due: past,
+          dbNow: now,
+        };
+      });
+
+      // A + B: chỉ bản TỚI HẠN được đăng; bản hẹn tương lai không bị chạm.
+      expect(seen.firstSlugs).toEqual(['tz-due']);
+      expect(seen.byslug['tz-future'].status).toBe('PENDING');
+      expect(seen.byslug['tz-future'].scheduledAt).not.toBeNull();
+
+      // B: chuẩn hoá đúng, GIỮ mốc công khai theo giờ đã hẹn.
+      expect(seen.byslug['tz-due'].status).toBe('PUBLISHED');
+      expect(seen.byslug['tz-due'].scheduledAt).toBeNull();
+      expect(seen.byslug['tz-due'].publishedAt).toEqual(seen.due);
+
+      /**
+       * `updated_at` phải ghi ở biểu diễn UTC. `NOW()` trần sẽ ghi giờ ĐỊA
+       * PHƯƠNG (+07) vào cột `timestamp` vốn chứa UTC, làm mốc "Cập nhật" nhảy
+       * về tương lai vài tiếng. Cho biên độ rộng để không phụ thuộc độ trễ, chỉ
+       * cần loại được sai lệch cỡ nguyên giờ của offset múi giờ.
+       */
+      const skewMs =
+        seen.byslug['tz-due'].updatedAt.getTime() - seen.dbNow.getTime();
+      expect(Math.abs(skewMs)).toBeLessThan(5 * 60_000);
+
+      // C: dị dạng DRAFT + lịch quá khứ KHÔNG bao giờ được chuẩn hoá.
+      expect(seen.byslug['tz-draft-past'].status).toBe('DRAFT');
+      expect(seen.byslug['tz-draft-past'].scheduledAt).not.toBeNull();
+
+      // D + E: không lịch và đã đăng đều bị bỏ qua.
+      expect(seen.byslug['tz-pending-nosched'].status).toBe('PENDING');
+      expect(seen.byslug['tz-published'].status).toBe('PUBLISHED');
+
+      // Lượt hai không đăng thêm gì.
       expect(seen.secondCount).toBe(0);
     });
   });

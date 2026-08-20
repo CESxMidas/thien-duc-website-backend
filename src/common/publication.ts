@@ -247,3 +247,37 @@ export function isCooperationPubliclyVisible(
     project.scheduledAt.getTime() <= now.getTime()
   );
 }
+
+/* -------------------------------------------------------------------------
+   TRANG NỘI DUNG — hàm chị em, cùng luật.
+
+   `Page` gọi cột trạng thái là `status` (giống `NewsPost`), nên vị từ trên bản
+   ghi đã nạp dùng lại được `isPubliclyVisible` ở trên mà không cần hàm mới —
+   `PublishableRecord` là structural type khớp sẵn. Chỉ `where` là phải có bản
+   riêng, vì nó gắn kiểu với đúng một model để TypeScript bắt được lỗi nhắm
+   nhầm cột.
+   ------------------------------------------------------------------------- */
+
+/**
+ * Mảnh `where` cho Prisma trên bảng `pages` — dùng cho CẢ HAI truy vấn công
+ * khai (`GET /pages` và `GET /pages/:slug`).
+ *
+ * ```
+ * status = PUBLISHED
+ * HOẶC (status = PENDING AND scheduled_at IS NOT NULL AND scheduled_at <= now)
+ * ```
+ *
+ * Ràng buộc `PENDING` ở nhánh hai là chốt bảo mật: bỏ nó đi thì một hàng dị
+ * dạng `DRAFT` + `scheduled_at` quá khứ sẽ lọt ra công khai.
+ */
+export function pagePubliclyVisibleWhere(now: Date): Prisma.PageWhereInput {
+  return {
+    OR: [
+      { status: ContentStatus.PUBLISHED },
+      {
+        status: ContentStatus.PENDING,
+        scheduledAt: { not: null, lte: now },
+      },
+    ],
+  };
+}

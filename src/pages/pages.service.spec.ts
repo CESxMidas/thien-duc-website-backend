@@ -41,6 +41,10 @@ describe('PagesService — vòng đời xuất bản', () => {
           id: 'g1',
           slug: 'gioi-thieu',
           status: ContentStatus.DRAFT,
+          // Batch 11: bản ghi thật luôn mang hai cột mốc. Stub thiếu chúng thì
+          // vị từ quyền sửa đọc `undefined !== null` và chặn nhầm.
+          scheduledAt: null,
+          publishedAt: null,
         }),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -102,6 +106,10 @@ describe('PagesService — vòng đời xuất bản', () => {
         id: 'g1',
         slug: 'gioi-thieu',
         status,
+        // Chưa từng công khai, chưa hẹn giờ — ca cơ bản của Batch 8. Các ca có
+        // lịch/lịch sử nằm ở `pages-editor-edit.service.spec.ts`.
+        scheduledAt: null,
+        publishedAt: null,
       });
     }
 
@@ -198,6 +206,8 @@ describe('PagesService — vòng đời xuất bản', () => {
           id: 'g1',
           slug: 'gioi-thieu',
           status: ContentStatus.PENDING,
+          scheduledAt: null,
+          publishedAt: null,
         });
 
         await service.updateStatus('gioi-thieu', ContentStatus.PUBLISHED, role);
@@ -208,13 +218,30 @@ describe('PagesService — vòng đời xuất bản', () => {
   });
 
   describe('hiển thị công khai', () => {
-    it('route công khai chỉ lấy trang PUBLISHED', async () => {
+    /**
+     * Batch 11 đổi vị từ từ `status = PUBLISHED` sang luật hai nhánh dùng chung.
+     * Test khoá đúng HÌNH DẠNG đó: nhánh lịch **phải** kèm `PENDING`, vì thiếu
+     * nó thì hàng dị dạng `DRAFT` + lịch quá khứ lọt ra website.
+     */
+    it('route công khai dùng vị từ hiển thị hai nhánh (đã đăng HOẶC lịch đã tới hạn)', async () => {
       await service.findAll(true);
 
       const [{ where }] = prisma.page.findMany.mock.calls[0] as [
-        { where?: { status?: ContentStatus } },
+        {
+          where?: {
+            OR?: {
+              status?: ContentStatus;
+              scheduledAt?: { not: null; lte: Date };
+            }[];
+          };
+        },
       ];
-      expect(where?.status).toBe(ContentStatus.PUBLISHED);
+      const branches = where?.OR ?? [];
+      expect(branches).toHaveLength(2);
+      expect(branches[0]).toEqual({ status: ContentStatus.PUBLISHED });
+      expect(branches[1]?.status).toBe(ContentStatus.PENDING);
+      expect(branches[1]?.scheduledAt?.lte).toBeInstanceOf(Date);
+      expect(branches[1]?.scheduledAt?.not).toBeNull();
     });
 
     it('trang vừa tạo (DRAFT) không xem được qua route công khai', async () => {

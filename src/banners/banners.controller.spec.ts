@@ -42,3 +42,41 @@ describe('BannersController @Roles (R2: chặn EDITOR quản lý banner)', () =>
     expect(requiredRoles('findAll')).toBeUndefined();
   });
 });
+
+/**
+ * Batch 12 — chốt kiến trúc: cửa sổ hiển thị được xét LÚC TRUY VẤN, nên module
+ * banner không được mọc thêm bất kỳ mảnh vòng đời xuất bản nào. Test này đứng
+ * đây để một batch sau muốn thêm reconciler/lệnh xuất bản cho banner thì phải
+ * xoá nó đi một cách có ý thức.
+ */
+describe('BannersController — không có vòng đời xuất bản (Batch 12)', () => {
+  const handlers = Object.getOwnPropertyNames(
+    BannersController.prototype,
+  ).filter((name) => name !== 'constructor');
+
+  it('chỉ có đúng bảy handler CRUD + reorder, không thêm lệnh xuất bản', () => {
+    expect(handlers.sort()).toEqual(
+      [
+        'create',
+        'findAll',
+        'findAllForAdmin',
+        'findOne',
+        'remove',
+        'reorder',
+        'update',
+      ].sort(),
+    );
+  });
+
+  it.each([
+    'publish',
+    'publishNow',
+    'schedule',
+    'cancelSchedule',
+    'publishDue',
+    'submit',
+    'approve',
+  ])('không có handler "%s"', (name) => {
+    expect(handlers).not.toContain(name);
+  });
+});

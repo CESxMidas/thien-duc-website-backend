@@ -296,18 +296,34 @@ model Page {
 }
 
 model Banner {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   image          String
   eyebrow        Json?
   title          Json
   subtitle       Json?
   href           String
-  ctaLabel       Json?    @map("cta_label")
-  objectPosition String?  @map("object_position")
-  order          Int      @default(0)
-  isActive       Boolean  @default(true) @map("is_active")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  ctaLabel       Json?     @map("cta_label")
+  objectPosition String?   @map("object_position")
+  order          Int       @default(0)
+  isActive       Boolean   @default(true) @map("is_active")
+  // CỬA SỔ HIỂN THỊ (Batch 12) — KHÔNG phải lịch xuất bản nội dung.
+  //
+  // Khác hẳn `news_posts`/`projects`/`pages`/`cooperation_projects`: ở đó
+  // `scheduled_at`/`published_at` gắn với vòng đời DRAFT→PENDING→PUBLISHED và có
+  // reconciler đổi trạng thái khi tới hạn. Banner KHÔNG có vòng đời đó. Hai cột
+  // dưới đây chỉ là **cấu hình khoảng thời gian đủ điều kiện hiển thị**, xét
+  // hoàn toàn LÚC TRUY VẤN — không cron, không mutation tại mốc đáo hạn.
+  //
+  // NULL = không có biên tương ứng. Khoảng nửa mở [displayFrom, displayUntil):
+  // đúng lúc displayFrom là hiện, đúng lúc displayUntil là tắt — nhờ vậy hai
+  // banner nối tiếp nhau tại cùng một mốc không bao giờ chồng lấn.
+  //
+  // `isActive` vẫn là công tắc thủ công và vẫn quyết định sau cùng: banner nằm
+  // trong cửa sổ nhưng đang tắt thì vẫn ẩn.
+  displayFrom    DateTime? @map("display_from")
+  displayUntil   DateTime? @map("display_until")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("banners")
 }

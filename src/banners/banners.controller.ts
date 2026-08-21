@@ -23,7 +23,13 @@ import { UpdateBannerDto } from './dto/update-banner.dto';
 export class BannersController {
   constructor(private readonly bannersService: BannersService) {}
 
-  /** Trang chủ chỉ lấy banner đang bật. */
+  /**
+   * Trang chủ chỉ lấy banner ĐANG BẬT và ĐANG TRONG CỬA SỔ HIỂN THỊ.
+   *
+   * Cả hai điều kiện được xét ngay lúc truy vấn (xem `display-window.ts`), nên
+   * frontend không cần bất kỳ phép lọc theo đồng hồ nào: banner chưa tới hạn
+   * hoặc đã hết hạn đơn giản là không có mặt trong phản hồi.
+   */
   @Get()
   findAll() {
     return this.bannersService.findAll(true);

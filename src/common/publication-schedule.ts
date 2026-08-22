@@ -13,12 +13,12 @@ import { ContentStatus } from '../../generated/prisma/client';
  * với *lịch sử xuất bản thật*. Mỗi bản sao của luật này là một cơ hội để hai
  * module trả lời khác nhau cho cùng một câu hỏi.
  *
- * ## Ghi chú về Dự án (Batch 9)
+ * ## Ghi chú về Dự án (Batch 13D)
  *
- * `projects.service.ts` hiện còn bản sao cục bộ của đúng các hàm này, viết
- * trước khi có file này. Cố ý KHÔNG sửa nó trong Batch 10: Dự án đã commit và
- * đã qua kiểm thử, việc rút ruột nó thuộc về một đợt dọn dẹp riêng. Hai bản
- * hiện khớp nhau từng nhánh.
+ * `projects.service.ts` từng giữ bản sao cục bộ của đúng các hàm này, viết
+ * trước khi có file này; Batch 13D đã xoá bản sao đó và cho Dự án dùng thẳng
+ * các hàm ở đây. Tin tức (`news.service.ts`) vẫn còn bản sao riêng — dọn ở đợt
+ * sau.
  */
 
 /** Bộ ba cột quyết định trạng thái lịch của một bản ghi. */

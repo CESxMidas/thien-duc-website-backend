@@ -12,6 +12,14 @@ import {
   isProjectPubliclyVisible,
   projectPubliclyVisibleWhere,
 } from '../common/publication';
+import {
+  clearedSchedule,
+  editorMayEditScheduled,
+  hasHistoricalPublication,
+  isActiveFutureSchedule,
+  publishedAtFor,
+  type ScheduleState,
+} from '../common/publication-schedule';
 import { assertScheduleWindow } from '../common/schedule-window';
 import { CreateGalleryImageDto } from './dto/create-gallery-image.dto';
 import { CreateProjectItemDto } from './dto/create-project-item.dto';
@@ -30,24 +38,6 @@ function isUniqueViolation(error: unknown): boolean {
 /** Ảnh và hạng mục luôn trả theo `order` tăng dần — thứ tự do biên tập viên đặt. */
 const BY_ORDER = { order: 'asc' } as const;
 
-/**
- * `scheduledAt` phải bị xoá khi đổi trạng thái **thủ công** sang PUBLISHED hoặc
- * DRAFT — trả `null` để xoá, `undefined` để không đụng tới cột.
- *
- * Vì sao cần: một dự án từng lên lịch rồi được ADMIN gỡ về nháp mà vẫn giữ
- * `scheduled_at` ở quá khứ sẽ là một hàng dị dạng (DRAFT + lịch quá khứ). Vị từ
- * hiển thị và reconciler đều đòi `PENDING` nên nó không lọt ra công khai được,
- * nhưng để lại rác đó là mời gọi một lỗi trong tương lai.
- *
- * PENDING cố ý KHÔNG xoá: "đã lên lịch" chính là `PENDING` + `scheduledAt`. Xoá
- * ở đây sẽ huỷ lịch âm thầm mỗi lần ADMIN chuyển dự án về hàng chờ duyệt.
- */
-function clearedSchedule(next: ContentStatus): null | undefined {
-  return next === ContentStatus.PUBLISHED || next === ContentStatus.DRAFT
-    ? null
-    : undefined;
-}
-
 /** Thông điệp 403 khi EDITOR sửa nội dung của dự án đã xuất bản. */
 const EDIT_DENIED_MESSAGE =
   'Dự án đã xuất bản hoặc đã được lên lịch nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.';
@@ -61,94 +51,6 @@ const EDIT_DENIED_MESSAGE =
  */
 const CHILD_EDIT_DENIED_MESSAGE =
   'Dự án đã xuất bản hoặc đã được lên lịch nên biên tập viên không sửa được hạng mục và thư viện ảnh của nó. Hãy nhờ quản trị viên.';
-
-/**
- * Hình dạng tối thiểu để xét trạng thái xuất bản/lịch của một dự án.
- *
- * `contentStatus` là bậc thang duyệt. **KHÔNG** phải `Project.status` — cột đó
- * là tình trạng thi công (đang thi công / đã bàn giao) và không liên quan gì
- * tới việc nội dung có ra công khai hay không.
- */
-type ProjectScheduleState = {
-  contentStatus: ContentStatus;
-  scheduledAt: Date | null;
-  publishedAt: Date | null;
-};
-
-/** Dự án đã **thật sự** ra công khai bao giờ chưa (mốc nằm ở quá khứ)? */
-function hasBeenPublic(
-  project: { publishedAt: Date | null },
-  now: Date,
-): boolean {
-  return (
-    project.publishedAt !== null &&
-    project.publishedAt.getTime() <= now.getTime()
-  );
-}
-
-/**
- * Dự án có đang giữ một **lịch tương lai hợp lệ** không? (Đổi được, huỷ được.)
- *
- * Bốn điều kiện đều cần — giống hệt luật đã chốt cho tin tức. `publishedAt`
- * **đúng bằng** `scheduledAt` là dấu hiệu mốc kia do chính lệnh đặt lịch ghi ra
- * (một *dự định* chưa thành sự thật), phân biệt với lịch sử xuất bản THẬT.
- */
-function isActiveFutureSchedule(
-  project: ProjectScheduleState,
-  now: Date,
-): boolean {
-  return (
-    project.contentStatus === ContentStatus.PENDING &&
-    project.scheduledAt !== null &&
-    project.publishedAt !== null &&
-    project.scheduledAt.getTime() > now.getTime() &&
-    project.publishedAt.getTime() === project.scheduledAt.getTime()
-  );
-}
-
-/**
- * Dự án đã có **lịch sử xuất bản thật** chưa? Có `publishedAt`, và mốc đó không
- * phải dự định của một lịch tương lai đang chờ.
- */
-function hasHistoricalPublication(
-  project: ProjectScheduleState,
-  now: Date,
-): boolean {
-  return project.publishedAt !== null && !isActiveFutureSchedule(project, now);
-}
-
-/**
- * **EDITOR có được sửa nội dung dự án này không?** (Batch 9 siết lại luật của
- * Batch 8.)
- *
- * Trước Batch 9, dự án chưa có cột mốc thời gian nên luật đành lấy phần chắc
- * chắn: chặn ở `PUBLISHED`, cho sửa mọi `PENDING`. Nay dự án hẹn giờ được, và
- * "mọi PENDING" không còn đủ — một dự án ĐÃ ĐƯỢC ADMIN LÊN LỊCH vẫn lưu là
- * `PENDING`. Để nguyên luật cũ là mở lại đúng lỗ hổng 07:59 mà Batch 8 đóng,
- * lần này trên dự án:
- *
- * ```
- * 07:00  ADMIN hẹn đăng dự án lúc 08:00   (PENDING + scheduledAt)
- * 07:59  EDITOR sửa nội dung
- * 08:00  bản ĐÃ SỬA tự ra công khai
- * ```
- *
- * Luật mới khớp từng ca với tin tức: cho sửa nháp chưa từng công khai và dự án
- * chờ duyệt CHƯA hẹn giờ; chặn lịch tương lai, lịch đã tới hạn, dự án đang đăng,
- * và nháp từng đăng. Không cần đồng hồ: lệnh đặt lịch ghi
- * `publishedAt = scheduledAt`, nên chỉ cần *sự tồn tại* của mốc.
- *
- * Cooperation và Page vẫn dùng `editorMayEditUnpublished` — chúng chưa có cột
- * mốc nào để mà xét, và Batch 9 cố ý không đụng tới hai module đó.
- */
-function editorMayEditProject(project: ProjectScheduleState): boolean {
-  if (project.publishedAt !== null) return false;
-  if (project.contentStatus === ContentStatus.DRAFT) return true;
-  return (
-    project.contentStatus === ContentStatus.PENDING &&
-    project.scheduledAt === null
-  );
-}
 
 /**
  * Các cột JSON tùy chọn: khi Admin muốn **xóa** nội dung (vd. bỏ bản đồ), payload
@@ -271,16 +173,16 @@ export class ProjectsService {
    * không ai duyệt lại.
    *
    * Dùng lại đúng bậc thang vai trò của Batch 8 (`assertContentEditAllowed`) và
-   * đúng vị từ của dự án (`editorMayEditUnpublished`): không có ma trận quyền thứ
-   * hai, không so sánh vai trò rải rác ở từng lệnh con.
+   * đúng vị từ dùng chung của bản ghi có hẹn giờ (`editorMayEditScheduled`):
+   * không có ma trận quyền thứ hai, không so sánh vai trò rải rác ở từng lệnh con.
    */
   private assertChildEditAllowed(
-    parent: ProjectScheduleState,
+    parent: ScheduleState,
     actorRole?: string,
   ): void {
     assertContentEditAllowed(
       actorRole,
-      editorMayEditProject(parent),
+      editorMayEditScheduled(parent),
       CHILD_EDIT_DENIED_MESSAGE,
     );
   }
@@ -335,9 +237,9 @@ export class ProjectsService {
    * Sửa nội dung dự án.
    *
    * Thứ tự BẮT BUỘC: nạp bản ghi → chốt quyền theo `contentStatus` đã lưu → mới
-   * ghi. EDITOR sửa được `DRAFT`/`PENDING`, không sửa được dự án đang hiển thị
-   * công khai (`PUBLISHED`); ADMIN trở lên không đổi. Xem giới hạn đã biết của
-   * ba module chưa có cột lịch sử xuất bản ở `editorMayEditUnpublished`.
+   * ghi. Vị từ là `editorMayEditScheduled` dùng chung: EDITOR sửa được nháp chưa
+   * từng công khai và bản chờ duyệt CHƯA hẹn giờ; chặn lịch tương lai, lịch đã
+   * tới hạn, dự án đang đăng, và nháp từng đăng. ADMIN trở lên không đổi.
    *
    * `status` (tình trạng thi công) vẫn sửa bình thường ở các trạng thái được
    * phép — nó không phải trạng thái xuất bản.
@@ -346,7 +248,7 @@ export class ProjectsService {
     const project = await this.findBySlug(slug);
     assertContentEditAllowed(
       actorRole,
-      editorMayEditProject(project),
+      editorMayEditScheduled(project),
       EDIT_DENIED_MESSAGE,
     );
     // Chuẩn hóa null → Prisma.DbNull TRƯỚC, rồi bọc chính giá trị đã chuẩn hóa
@@ -385,6 +287,15 @@ export class ProjectsService {
     }
   }
 
+  /**
+   * Cửa DUY NHẤT đổi trạng thái thủ công (ngoài hai lệnh lịch bên dưới).
+   *
+   * Ngữ nghĩa mốc thời gian khớp từng ca với Tin tức, Dự án hợp tác và Trang —
+   * xem `publishedAtFor`: "Đăng ngay" một dự án đang hẹn lịch cho mốc **bây
+   * giờ** (lần đăng theo lịch kia đã không xảy ra); đăng lại một dự án từng
+   * công khai giữ nguyên mốc gốc (`publishedAt` ở đây luôn có nghĩa **lần công
+   * khai ĐẦU TIÊN**); trả về nháp KHÔNG xoá lịch sử xuất bản thật.
+   */
   async updateStatus(slug: string, status: ContentStatus, actorRole?: string) {
     const project = await this.findBySlug(slug);
     // EDITOR chỉ được gửi duyệt (DRAFT → PENDING); ADMIN trở lên đặt tùy ý.
@@ -394,43 +305,10 @@ export class ProjectsService {
       where: { id: project.id },
       data: {
         contentStatus: status,
-        publishedAt: this.publishedAtFor(project, status, now),
+        publishedAt: publishedAtFor(project, status, now),
         scheduledAt: clearedSchedule(status),
       },
     });
-  }
-
-  /**
-   * `publishedAt` cho một lần đổi trạng thái thủ công của dự án. Ba nhánh, khớp
-   * từng ca với tin tức:
-   *
-   * - **Đăng ngay một dự án đang hẹn lịch chưa tới hạn.** Lệnh đặt lịch đã ghi
-   *   `publishedAt = scheduledAt` ở **tương lai**. Giữ nguyên mốc đó thì dự án
-   *   vừa bấm đăng lại mang mốc công khai nằm ở ngày mai. Bấm "Đăng ngay" nghĩa
-   *   là công khai **bây giờ**, nên mốc phải là bây giờ — lần công khai theo lịch
-   *   kia đã không xảy ra.
-   * - **Đăng một dự án chưa từng có mốc nào** → `now`.
-   * - **Đăng lại một dự án từng công khai thật** → giữ mốc lịch sử. `publishedAt`
-   *   ở dự án này luôn có nghĩa **lần công khai ĐẦU TIÊN**.
-   *
-   * Với DRAFT: xoá `publishedAt` **chỉ khi** nó nằm ở tương lai — tức dự án chưa
-   * từng công khai, mốc đó chỉ là ý định. Dự án đã thật sự công khai (kể cả dự án
-   * tới hạn mà reconciler chưa chạm tới, vốn đã hiển thị qua vị từ hiển thị) giữ
-   * nguyên mốc: nó **đã** ra ngoài, xoá đi là xoá mất sự thật đó.
-   */
-  private publishedAtFor(
-    project: { publishedAt: Date | null },
-    next: ContentStatus,
-    now: Date,
-  ): Date | null | undefined {
-    if (next === ContentStatus.PUBLISHED) {
-      return hasBeenPublic(project, now) ? project.publishedAt : now;
-    }
-    if (next === ContentStatus.DRAFT) {
-      return hasBeenPublic(project, now) ? project.publishedAt : null;
-    }
-    // PENDING: không đụng tới mốc công khai.
-    return project.publishedAt;
   }
 
   /**

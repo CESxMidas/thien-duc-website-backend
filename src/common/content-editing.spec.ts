@@ -1,9 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
-import { ContentStatus, Role } from '../../generated/prisma/client';
-import {
-  assertContentEditAllowed,
-  editorMayEditUnpublished,
-} from './content-editing';
+import { Role } from '../../generated/prisma/client';
+import { assertContentEditAllowed } from './content-editing';
 
 /**
  * Bậc thang vai trò của quyền **sửa nội dung** (Batch 8), dùng chung cho cả bốn
@@ -68,18 +65,5 @@ describe('assertContentEditAllowed', () => {
         ForbiddenException,
       );
     }
-  });
-});
-
-describe('editorMayEditUnpublished (Project / Cooperation / Page)', () => {
-  it.each([ContentStatus.DRAFT, ContentStatus.PENDING])(
-    '%s: EDITOR còn sửa được',
-    (status) => {
-      expect(editorMayEditUnpublished(status)).toBe(true);
-    },
-  );
-
-  it('PUBLISHED: EDITOR không sửa được nữa', () => {
-    expect(editorMayEditUnpublished(ContentStatus.PUBLISHED)).toBe(false);
   });
 });

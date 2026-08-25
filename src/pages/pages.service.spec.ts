@@ -96,9 +96,10 @@ describe('PagesService — vòng đời xuất bản', () => {
   /**
    * Batch 8 — EDITOR không sửa được trang ĐANG hiển thị công khai.
    *
-   * Page chưa có `publishedAt`/`scheduledAt` nên không phân biệt được "nháp chưa
-   * từng đăng" với "nháp đã từng đăng rồi gỡ xuống" (xem
-   * `editorMayEditUnpublished`). Luật lấy đúng phần chắc chắn: chặn ở PUBLISHED.
+   * Ba ca dưới đây cố định phần **cơ bản** của luật: trang chưa từng công khai
+   * và chưa hẹn giờ thì EDITOR còn sửa được (`DRAFT`, `PENDING`), trang đang
+   * đăng thì không. Các ca phụ thuộc lịch/lịch sử xuất bản — đã hẹn giờ, lịch
+   * đã tới hạn, nháp TỪNG đăng — nằm ở `pages-editor-edit.service.spec.ts`.
    */
   describe('update — quyền sửa nội dung theo vai trò × trạng thái', () => {
     function given(status: ContentStatus) {

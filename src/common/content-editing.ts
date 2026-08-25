@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { ContentStatus, Role } from '../../generated/prisma/client';
+import { Role } from '../../generated/prisma/client';
 
 /**
  * **Chốt quyền SỬA NỘI DUNG theo trạng thái xuất bản hiện tại.**
@@ -16,7 +16,8 @@ import { ContentStatus, Role } from '../../generated/prisma/client';
  *
  * Tức là bản mà ADMIN duyệt/hẹn giờ **không** được bảo đảm là bản ra công khai.
  * Cùng một lỗ hổng, dạng nhẹ hơn, ở Project/Cooperation/Page: EDITOR sửa được
- * nội dung đang hiển thị trên website mà không ai duyệt lại.
+ * nội dung đang hiển thị trên website mà không ai duyệt lại. Nay **cả bốn**
+ * module đều đi qua chốt này.
  *
  * ## Luật
  *
@@ -31,12 +32,15 @@ import { ContentStatus, Role } from '../../generated/prisma/client';
  *
  * ## Vì sao nhận `boolean` chứ không nhận bản ghi
  *
- * Điều kiện của EDITOR **không** dùng chung được: News xét thêm `scheduledAt` /
- * `publishedAt`, ba module còn lại chưa có hai cột đó. Nhét luật lịch của News
- * vào một hàm generic sẽ hoặc đòi mọi module giả lập hai cột không tồn tại,
- * hoặc dựng một lớp trừu tượng bịt mất chính chỗ khác biệt quan trọng nhất.
- * Nên phần *dùng chung* (bậc thang vai trò) nằm ở đây, phần *riêng theo trạng
- * thái* nằm cạnh dữ liệu của từng module.
+ * Ranh giới trách nhiệm: file này sở hữu **bậc thang vai trò**, còn việc đọc
+ * trạng thái lịch của bản ghi thuộc về `publication-schedule.ts`. Nhận sẵn một
+ * `boolean` giữ hai mối bận tâm đó tách nhau — hàm này không cần biết model nào
+ * đặt tên cột ra sao (`status` ở News/Page, `contentStatus` ở Project), cũng
+ * không phải nạp thêm cột nào để trả lời câu hỏi về vai trò.
+ *
+ * Hiện cả bốn module đều truyền vào `editorMayEditScheduled` (vị từ dùng chung
+ * ở `publication-schedule.ts`), nhưng chữ ký vẫn để ngỏ `boolean` để một module
+ * có luật riêng không phải phá vỡ chốt vai trò này.
  *
  * Thông điệp từ chối do lời gọi truyền vào để mỗi module gọi đúng tên nội dung
  * ("Bài viết" / "Dự án" / "Trang"), thứ mà Admin CMS hiện thẳng cho người dùng.
@@ -50,28 +54,4 @@ export function assertContentEditAllowed(
   if (role === Role.EDITOR && editorMayEdit) return;
 
   throw new ForbiddenException(denialMessage);
-}
-
-/**
- * Vị từ EDITOR cho các module **chưa có cột lịch sử xuất bản** — Project,
- * CooperationProject, Page: sửa được khi còn `DRAFT` hoặc `PENDING`, không sửa
- * được khi đã `PUBLISHED`.
- *
- * ## Giới hạn đã biết (cố ý)
- *
- * Ba model này không có `publishedAt` lẫn `scheduledAt`, nên **không phân biệt
- * được** hai bản ghi cùng mang `DRAFT`:
- *
- * - bản nháp chưa từng công khai, và
- * - bản đã đăng rồi bị ADMIN gỡ về nháp.
- *
- * News phân biệt được nhờ `publishedAt`, và luật của News siết đúng theo đó.
- * Ở đây thì trạng thái lưu trữ không mang đủ thông tin, mà **bịa ra lịch sử là
- * việc tệ hơn**: suy đoán từ `updatedAt` sẽ sai với mọi bản ghi cũ và sai theo
- * hướng khó thấy. Batch này lấy đúng phần chắc chắn — chặn sửa nội dung ĐANG
- * hiển thị công khai. Khi nào ba module có cột lịch sử xuất bản thật thì siết
- * tiếp cho khớp News.
- */
-export function editorMayEditUnpublished(status: ContentStatus): boolean {
-  return status === ContentStatus.DRAFT || status === ContentStatus.PENDING;
 }

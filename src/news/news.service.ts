@@ -14,6 +14,14 @@ import {
   MIN_SCHEDULE_LEAD_MS,
 } from '../common/schedule-window';
 import { isPubliclyVisible, publiclyVisibleWhere } from '../common/publication';
+import {
+  clearedSchedule,
+  editorMayEditScheduled,
+  hasHistoricalPublication,
+  isActiveFutureSchedule,
+  publishedAtFor,
+  type ScheduleState,
+} from '../common/publication-schedule';
 import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
@@ -23,25 +31,6 @@ import { UpdateNewsPostDto } from './dto/update-news-post.dto';
 const UNIQUE_CONSTRAINT = 'P2002';
 
 /**
- * `scheduledAt` phải bị xoá khi đổi trạng thái **thủ công** sang PUBLISHED hoặc
- * DRAFT — trả `null` để xoá, `undefined` để không đụng tới cột.
- *
- * Vì sao cần: `NewsSchedulerService` khớp `status <> 'PUBLISHED' AND
- * scheduled_at <= NOW()`. Một bài từng lên lịch rồi được ADMIN gỡ về nháp vẫn
- * giữ nguyên `scheduled_at` ở quá khứ, nên nó khớp lại điều kiện đó và **tự
- * đăng lại** trong vòng 5 phút — đúng thứ mà thao tác "Trả về nháp" muốn ngăn.
- *
- * PENDING cố ý KHÔNG xoá: theo mô hình đã duyệt, "đã lên lịch" chính là
- * `PENDING` + `scheduledAt`. Xoá ở đây sẽ huỷ lịch một cách âm thầm mỗi lần
- * ADMIN chuyển bài về hàng chờ duyệt.
- */
-function clearedSchedule(next: ContentStatus): null | undefined {
-  return next === ContentStatus.PUBLISHED || next === ContentStatus.DRAFT
-    ? null
-    : undefined;
-}
-
-/**
  * Hai ngưỡng của cửa sổ hẹn giờ nay nằm ở `common/schedule-window.ts` vì dự án
  * (Batch 9) dùng đúng luật này. Re-export để mọi import sẵn có — kể cả
  * `news-schedule-command.service.spec.ts` — không phải đổi đường dẫn.
@@ -49,99 +38,32 @@ function clearedSchedule(next: ContentStatus): null | undefined {
 export { MAX_SCHEDULE_HORIZON_MS, MIN_SCHEDULE_LEAD_MS };
 
 /**
- * Bài đã **thật sự** ra công khai bao giờ chưa?
+ * Hình dạng tối thiểu để xét trạng thái lịch của một bài.
  *
- * Nhờ bất biến `scheduledAt != null ⇒ publishedAt = scheduledAt`, `publishedAt`
- * nằm ở **tương lai** có nghĩa duy nhất: đây là một lịch chưa tới hạn, nội dung
- * chưa từng hiển thị cho ai. `publishedAt` trong quá khứ thì ngược lại — hoặc
- * bài từng đăng thật, hoặc lịch đã tới hạn nên Batch 2 đã cho nó ra công khai.
+ * `NewsPost` gọi cột bậc thang duyệt là **`status`**, trong khi các vị từ dùng
+ * chung ở `common/publication-schedule.ts` nhận `contentStatus` (tên của
+ * `Project`, model duy nhất có thêm một cột `status` mang nghĩa khác). Đổi tên
+ * đi qua đúng một hàm chuyển có kiểu chặt (`toScheduleState`) thay vì chép lại
+ * luật — giống hệt cách `pages.service.ts` làm.
  *
- * Đây là thứ phân biệt "huỷ một lịch chưa xảy ra" (xoá sạch dấu vết) với "gỡ
- * một nội dung đã công khai" (giữ lại mốc lịch sử).
+ * Vì sao không chép: phép so `publishedAt === scheduledAt` để phân biệt một
+ * *dự định* chưa xảy ra với *lịch sử xuất bản thật* là chỗ tinh tế nhất của cả
+ * cơ chế hẹn giờ. Mỗi bản sao là một cơ hội để hai module trả lời khác nhau cho
+ * cùng một câu hỏi.
  */
-function hasBeenPublic(post: { publishedAt: Date | null }, now: Date): boolean {
-  return (
-    post.publishedAt !== null && post.publishedAt.getTime() <= now.getTime()
-  );
-}
-
-/** Hình dạng tối thiểu để xét trạng thái lịch của một bài. */
-type SchedulableState = {
+type NewsPublicationState = {
   status: ContentStatus;
   scheduledAt: Date | null;
   publishedAt: Date | null;
 };
 
-/**
- * Bản ghi có đang giữ một **lịch tương lai hợp lệ** không?
- *
- * Đây là thứ phân biệt hai bản ghi trông na ná nhau vì cùng có `publishedAt`
- * khác NULL:
- *
- * - **Lịch đang chờ**: `PENDING`, `scheduledAt` ở tương lai, và `publishedAt`
- *   **đúng bằng** `scheduledAt` — tức mốc đó do chính lệnh đặt lịch ghi ra, là
- *   *dự định*, chưa bao giờ thành sự thật. Đổi lịch được.
- * - **Lịch sử xuất bản thật**: mọi trường hợp còn lại có `publishedAt`. Bài này
- *   từng ra công khai, mốc đó là *sự kiện đã xảy ra*. Không được ghi đè.
- *
- * Bốn điều kiện đều cần thiết. Bỏ `status === PENDING` thì một bài nháp mang
- * lịch dị dạng sẽ được coi là lịch hợp lệ; bỏ phép so bằng thì một bài từng
- * đăng năm 2020 rồi bị gán lịch sẽ mất mốc 2020.
- */
-function isActiveFutureSchedule(post: SchedulableState, now: Date): boolean {
-  return (
-    post.status === ContentStatus.PENDING &&
-    post.scheduledAt !== null &&
-    post.publishedAt !== null &&
-    post.scheduledAt.getTime() > now.getTime() &&
-    post.publishedAt.getTime() === post.scheduledAt.getTime()
-  );
-}
-
-/**
- * Bài đã có **lịch sử xuất bản thật** chưa? Có `publishedAt`, và mốc đó không
- * phải là dự định của một lịch tương lai đang chờ.
- */
-function hasHistoricalPublication(post: SchedulableState, now: Date): boolean {
-  return post.publishedAt !== null && !isActiveFutureSchedule(post, now);
-}
-
-/**
- * **EDITOR có được sửa NỘI DUNG bài này không?** (Vị từ riêng của News, ghép vào
- * bậc thang vai trò dùng chung ở `assertContentEditAllowed`.)
- *
- * Cho phép đúng hai trạng thái — nội dung còn thật sự đang trong khâu biên tập:
- *
- * - **A. Nháp chưa từng công khai**: `DRAFT` + `publishedAt = NULL`.
- * - **B. Đang chờ duyệt, chưa được hẹn giờ**: `PENDING` + không mốc nào. Cố ý
- *   vẫn mở: bắt EDITOR nhờ ADMIN cho từng lỗi chính tả trong lúc bài còn nằm ở
- *   hàng chờ là siết quá tay, vì chưa có ai duyệt gì để mà phá vỡ.
- *
- * Chặn mọi tổ hợp còn lại, trong đó ba trường hợp là lý do batch này tồn tại:
- *
- * - **Đã lên lịch (chưa tới hạn)** và **lịch đã tới hạn nhưng reconciler chưa
- *   chạy**: đây là bản ADMIN đã uỷ quyền cho một lần đăng. Sửa nó là đổi nội
- *   dung sẽ tự ra công khai — đúng lỗ hổng 07:59.
- * - **Nháp TỪNG đăng** (`DRAFT` + `publishedAt` lịch sử): `status` một mình
- *   nói sai. Bài đã ra ngoài, đã được index, có thể đăng lại chỉ bằng một cú
- *   bấm. Không được "hồi sinh" quyền sửa của EDITOR chỉ vì trạng thái là DRAFT.
- *
- * ## Không cần đồng hồ — và đó là điểm mạnh
- *
- * Nhờ bất biến `scheduledAt != null ⇒ publishedAt = scheduledAt` của lệnh đặt
- * lịch, cả "lịch tương lai" lẫn "lịch đã tới hạn" đều có `publishedAt != NULL`.
- * Nên chỉ cần *sự tồn tại* của mốc, không cần so sánh với `now`: bất biến
- * §12 (lịch đã đặt thì EDITOR không sửa được) đúng ở cả ba mốc thời gian —
- * trước hạn, đúng hạn, sau hạn mà cron chưa chạy — và không lệ thuộc đồng hồ
- * của tiến trình nào. Vế `scheduledAt === null` ở nhánh PENDING vì thế là lớp
- * chốt thứ hai, dùng cho dữ liệu dị dạng thiếu `publishedAt`.
- */
-function editorMayEditNews(post: SchedulableState): boolean {
-  // Có mốc công khai (dù là lịch sử thật hay lịch tương lai đã hẹn) ⇒ nội dung
-  // đã qua ranh giới duyệt/xuất bản. Hết quyền của EDITOR.
-  if (post.publishedAt !== null) return false;
-  if (post.status === ContentStatus.DRAFT) return true;
-  return post.status === ContentStatus.PENDING && post.scheduledAt === null;
+/** Đưa bài viết về hình dạng chung mà các vị từ lịch nhận vào. */
+function toScheduleState(post: NewsPublicationState): ScheduleState {
+  return {
+    contentStatus: post.status,
+    scheduledAt: post.scheduledAt,
+    publishedAt: post.publishedAt,
+  };
 }
 
 /** Thông điệp 403 khi EDITOR sửa bài đã qua ranh giới duyệt/xuất bản. */
@@ -312,7 +234,7 @@ export class NewsService {
     const post = await this.findBySlug(slug);
     assertContentEditAllowed(
       actorRole,
-      editorMayEditNews(post),
+      editorMayEditScheduled(toScheduleState(post)),
       EDIT_DENIED_MESSAGE,
     );
     const { eventDate, ...rest } = dto;
@@ -341,47 +263,16 @@ export class NewsService {
       where: { id: post.id },
       data: {
         status,
-        publishedAt: this.publishedAtFor(post, status, now),
+        publishedAt: publishedAtFor(post, status, now),
+        // `clearedSchedule` xoá `scheduledAt` khi về PUBLISHED/DRAFT. Với News
+        // đây còn là lớp chặn tự-đăng-lại: `NewsSchedulerService` khớp
+        // `status <> 'PUBLISHED' AND scheduled_at <= NOW()`, nên một bài từng
+        // lên lịch rồi được ADMIN gỡ về nháp mà vẫn giữ `scheduled_at` quá khứ
+        // sẽ khớp lại điều kiện đó và tự đăng lại trong vòng 5 phút — đúng thứ
+        // thao tác "Trả về nháp" muốn ngăn.
         scheduledAt: clearedSchedule(status),
       },
     });
-  }
-
-  /**
-   * `publishedAt` cho một lần đổi trạng thái thủ công.
-   *
-   * Ba nhánh, và nhánh giữa là thứ Batch 3 bắt buộc phải thêm:
-   *
-   * - **Đăng ngay một bài đang hẹn lịch chưa tới hạn.** Lệnh đặt lịch đã ghi
-   *   `publishedAt = scheduledAt` ở **tương lai**. Giữ nguyên giá trị đó thì bài
-   *   vừa bấm đăng lại mang mốc công khai nằm ở ngày mai: danh sách công khai
-   *   (sắp theo `publishedAt desc`) đẩy nó lên đầu sai chỗ, sitemap khai
-   *   `lastModified` ở tương lai, và JSON-LD nói bài xuất bản vào một ngày chưa
-   *   đến. Bấm "Đăng ngay" nghĩa là công khai **bây giờ**, nên mốc phải là bây giờ.
-   * - **Đăng một bài chưa từng có mốc nào** → `now`, như trước.
-   * - **Đăng lại một bài từng công khai thật** → giữ mốc lịch sử, đúng hành vi
-   *   đã có từ trước (khoá bởi `news.service.spec.ts`): thứ tự trang tin không
-   *   được nhảy lung tung sau mỗi lần sửa rồi đăng lại.
-   *
-   * Với DRAFT: xoá `publishedAt` **chỉ khi** nó nằm ở tương lai — tức bài chưa
-   * từng công khai, mốc đó chỉ là ý định chứ không phải lịch sử. Bài đã thật sự
-   * công khai (kể cả bài tới hạn mà reconciler chưa chạm tới, vốn đã hiển thị
-   * qua vị từ của Batch 2) giữ nguyên mốc: nó **đã** ra ngoài, xoá đi là xoá mất
-   * sự thật đó.
-   */
-  private publishedAtFor(
-    post: { publishedAt: Date | null },
-    next: ContentStatus,
-    now: Date,
-  ): Date | null | undefined {
-    if (next === ContentStatus.PUBLISHED) {
-      return hasBeenPublic(post, now) ? post.publishedAt : now;
-    }
-    if (next === ContentStatus.DRAFT) {
-      return hasBeenPublic(post, now) ? post.publishedAt : null;
-    }
-    // PENDING: không đụng tới mốc công khai.
-    return post.publishedAt;
   }
 
   /**
@@ -439,7 +330,7 @@ export class NewsService {
     // xếp hạng tìm kiếm dùng mốc nào, và lịch sử cũ có lấy lại được không.
     // Schema hiện không có bảng phiên bản/lịch sử để trả lời. Không trả lời
     // ngầm bằng một câu UPDATE.
-    if (hasHistoricalPublication(post, now)) {
+    if (hasHistoricalPublication(toScheduleState(post), now)) {
       throw new ConflictException(
         'Bài viết này đã từng được đăng nên không đặt lịch đăng lại được.',
       );
@@ -490,7 +381,7 @@ export class NewsService {
     // lệ — bài từng công khai và bị gán thêm lịch, hoặc tổ hợp dị dạng từ dữ
     // liệu cũ. Nhánh xoá bên dưới sẽ xoá `publishedAt`, mà ở đây mốc đó là lịch
     // sử thật. Từ chối thay vì xoá lịch sử.
-    if (!isActiveFutureSchedule(post, now)) {
+    if (!isActiveFutureSchedule(toScheduleState(post), now)) {
       throw new ConflictException(
         'Bài viết này đã từng được đăng nên không huỷ lịch theo cách này được. Dùng "Trả về nháp" để gỡ bài xuống.',
       );

@@ -4,12 +4,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { JSON_BODY_LIMIT } from './common/body-limit';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { setupSwagger } from './common/swagger';
 import { configureTrustProxy } from './common/trust-proxy';
 
 async function bootstrap() {
@@ -49,16 +49,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Thiên Đức API')
-    .setDescription(
-      'Đặc tả API backend website Thiên Đức (auth, projects, news, pages, banners, contact, media)',
-    )
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  // Ngoài production: /api/docs + /api/docs-json. Ở production KHÔNG khởi tạo —
+  // xem `common/swagger.ts` (fail-closed: thiếu NODE_ENV cũng coi là production).
+  setupSwagger(app);
 
   const port = configService.get<number>('PORT') ?? 3001;
   // Bind 0.0.0.0 để Render/host container định tuyến được (mặc định chỉ localhost trong 1 số môi trường).

@@ -33,8 +33,11 @@ import { ContentStatus, Prisma } from '../../generated/prisma/client';
  * `NOW()` của Postgres, vì `where` của Prisma chỉ nhận giá trị JS. Viết lại mọi
  * truy vấn News thành `$queryRaw` chỉ để lấy đồng hồ DB là cái giá quá đắt so
  * với lợi ích: host Render và Postgres Render nằm cùng region, lệch dưới một
- * giây, trong khi độ chính xác đăng bài tính bằng phút. `NewsSchedulerService`
- * vẫn dùng `NOW()` của DB vì nó đã là SQL thô sẵn.
+ * giây, trong khi độ chính xác đăng bài tính bằng phút. Bốn reconciler
+ * (`*SchedulerService`) thì dùng đồng hồ DB vì chúng vốn đã là SQL thô — và
+ * luôn ở dạng `(NOW() AT TIME ZONE 'utc')`, không bao giờ `NOW()` trần: cột là
+ * `timestamp WITHOUT time zone` chứa giờ UTC, nên `NOW()` trần sẽ lệch đúng
+ * bằng offset múi giờ của phiên DB.
  *
  * **Mỗi thao tác chỉ tạo `now` một lần** rồi truyền xuống mọi truy vấn con —
  * đặc biệt là cặp `count` + `findMany` của phân trang. Gọi `new Date()` hai lần
@@ -50,10 +53,13 @@ export interface PublishableRecord {
 /**
  * Mảnh `where` cho Prisma: `findMany`, `count`, `groupBy`.
  *
- * Kiểu trả về gắn với `NewsPost` vì đây là model duy nhất có `scheduledAt` ở
- * thời điểm này. Projects/Pages/Cooperation dùng tên cột khác (`contentStatus`)
- * và chưa có cột lịch — khi tới lượt chúng, thêm hàm chị em bên cạnh hàm này
- * thay vì dựng một lớp generic làm kiểu yếu đi.
+ * Kiểu trả về gắn với `NewsPost`. Cả bốn module có lịch đăng — Bài viết, Dự án,
+ * Trang, Dự án hợp tác — nay đều dùng luật hiển thị này, nhưng mỗi model gọi tên
+ * cột bậc thang duyệt một kiểu (`status` ở News/Pages, `contentStatus` ở
+ * Projects/Cooperation). Vì vậy file giữ các hàm chị em riêng cho từng bảng
+ * (`projectPubliclyVisibleWhere`, `pagePubliclyVisibleWhere`,
+ * `cooperationPubliclyVisibleWhere`) thay vì một lớp generic làm kiểu yếu đi —
+ * luật thì một, chữ ký thì theo từng model.
  */
 export function publiclyVisibleWhere(now: Date): Prisma.NewsPostWhereInput {
   return {

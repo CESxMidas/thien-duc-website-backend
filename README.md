@@ -46,8 +46,13 @@ Postgres local chạy bằng Docker ở **port 5433** (`docker compose up -d`) v
 
 ## Việc còn thiếu, chờ input công ty
 
-- SMTP thật cho thông báo form liên hệ — câu 9. (`contact.service.ts` còn TODO
-  gửi mail; phần lưu DB + rate-limit 5 req/IP/giờ đã chạy.)
+- ~~SMTP cho thông báo form liên hệ~~ **đã xong** (câu 9): email đi qua **Resend
+  HTTPS API** (gói `resend`), **không phải SMTP**. Cần `RESEND_API_KEY`,
+  `MAIL_FROM`, `CONTACT_NOTIFY_TO` — secret chỉ nằm phía server, không bao giờ
+  đặt tiền tố `NEXT_PUBLIC_` / `VITE_`. `contact.service.ts` **lưu lead trước**
+  rồi mới gửi và **không `await`**: thiếu cấu hình hay Resend lỗi thì chỉ ghi log
+  cảnh báo, lead đã lưu và request vẫn trả `201`. Rate-limit 5 req/IP/giờ giữ
+  nguyên; khách có để email thì đặt `replyTo` để trả lời thẳng.
 - ~~Cloudinary~~ **đã xong** (câu 12): cloud name `ksnntvmu`, `POST /media/upload`
   ép WebP + giới hạn 1200px, `DELETE /media/:id` xóa trên cloud trước.
 - ~~Hosting/DB~~ **đã chốt** (câu 11): Render (BE + Postgres) + Vercel (FE).

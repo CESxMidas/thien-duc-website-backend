@@ -18,3 +18,13 @@ scripts/backup/backup.env
 *.dump.gpg
 *.dump.sha256
 scripts/backup/logs/
+
+# Khóa riêng / chứng chỉ / file credential — CHƯA từng có file nào như vậy trong
+# repo (audit Batch 14A), thêm sẵn để một lần lỡ tay không thành sự cố.
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+service-account*.json
+service_account*.json

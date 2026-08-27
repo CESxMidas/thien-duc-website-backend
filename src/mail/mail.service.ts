@@ -49,11 +49,20 @@ const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
 };
 
-/** Route trang tự thiết lập mật khẩu trên Admin SPA (public). */
-const SETUP_PATH = '/thiet-lap-tai-khoan';
+/**
+ * Route trang tự thiết lập mật khẩu trên Admin SPA (public).
+ *
+ * CỐ Ý **không** có dấu `/` đầu. `new URL(path, base)` với path bắt đầu bằng
+ * `/` sẽ THAY THẾ toàn bộ pathname của base — nên `ADMIN_APP_URL` dạng
+ * sub-path (`https://www.thienduccons.vn/admin`) sẽ âm thầm mất tiền tố và
+ * email đi ra kèm link 404. Path tương đối thì nối đúng vào sau base.
+ * Xem `buildInvitationSetupUrl` để biết cách ghép.
+ */
+const SETUP_PATH = 'thiet-lap-tai-khoan';
 
-/** Route trang đặt lại mật khẩu (quên mật khẩu) trên Admin SPA (public). */
-const RESET_PATH = '/dat-lai-mat-khau';
+/** Route trang đặt lại mật khẩu (quên mật khẩu) trên Admin SPA (public).
+ * Cùng lý do như `SETUP_PATH`: không có dấu `/` đầu. */
+const RESET_PATH = 'dat-lai-mat-khau';
 
 /** Hiển thị thời gian theo giờ VN (UTC+7) — dữ liệu lưu UTC trong DB. */
 const VN_DATETIME = new Intl.DateTimeFormat('vi-VN', {
@@ -402,7 +411,14 @@ export class MailService implements OnModuleInit {
     }
   }
 
-  /** Dựng link thiết lập bằng URL API để token được mã hoá đúng chuẩn query. */
+  /**
+   * Dựng link thiết lập bằng URL API để token được mã hoá đúng chuẩn query.
+   *
+   * `${base}/` (base đã bị cắt hết `/` cuối ở `normalizeAdminAppUrl`) + path
+   * TƯƠNG ĐỐI ⇒ giữ nguyên sub-path nếu `ADMIN_APP_URL` có, ví dụ
+   * `https://www.thienduccons.vn/admin` → `.../admin/thiet-lap-tai-khoan`.
+   * Backend KHÔNG biết gì về `/admin`; tiền tố hoàn toàn do env quyết định.
+   */
   private buildInvitationSetupUrl(
     token: string,
     base = this.adminAppUrl,
@@ -412,7 +428,8 @@ export class MailService implements OnModuleInit {
     return url.toString();
   }
 
-  /** Dựng link đặt lại mật khẩu; token mã hoá đúng chuẩn query. */
+  /** Dựng link đặt lại mật khẩu; token mã hoá đúng chuẩn query.
+   * Ghép path tương đối như `buildInvitationSetupUrl` để giữ sub-path. */
   private buildPasswordResetUrl(
     token: string,
     base = this.adminAppUrl,

@@ -693,4 +693,122 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
       expectNoTokenOrUrlLeaked();
     });
   });
+  /**
+   * Batch 15B — `ADMIN_APP_URL` được phép chứa SUB-PATH.
+   *
+   * Admin chuyển từ `https://thien-duc-website-admin.vercel.app` (gốc `/`) sang
+   * `https://www.thienduccons.vn/admin` (sub-path). Bẫy: `new URL(path, base)`
+   * với `path` bắt đầu bằng `/` sẽ THAY THẾ pathname của base, nên `/admin` bị
+   * nuốt mất và email đi ra kèm link 404 — hỏng IM LẶNG, chỉ lộ ra khi người
+   * thật bấm vào link trong hộp thư. Hai case dưới khoá cả hai dạng base để
+   * regression không quay lại.
+   *
+   * Backend KHÔNG hardcode `/admin`: tiền tố hoàn toàn do env quyết định.
+   */
+  describe('ADMIN_APP_URL có sub-path (Batch 15B)', () => {
+    const SETUP_TOKEN = 'synthetic-invite-token-15b';
+    const RESET_TOKEN = 'synthetic-reset-token-15b';
+
+    const invite = {
+      to: 'nguoimoi@thienduc.vn',
+      name: 'Người Được Mời',
+      role: 'ADMIN' as const,
+      token: SETUP_TOKEN,
+      expiresAt: new Date('2026-07-18T03:00:00.000Z'),
+    };
+    const reset = {
+      to: 'nguoidung@thienduc.vn',
+      name: 'Người Dùng',
+      token: RESET_TOKEN,
+      expiresAt: new Date('2026-07-24T03:20:00.000Z'),
+    };
+
+    /** Lấy phần `text` của email đã gửi qua Resend (đã mock). */
+    function sentText(): string {
+      const payload = (mockResendSend.mock.calls as unknown[][])[0][0] as {
+        text: string;
+      };
+      return payload.text;
+    }
+
+    async function sendInviteWith(adminAppUrl: string): Promise<string> {
+      mockResendSend.mockResolvedValue({ data: { id: 'msg' }, error: null });
+      const service = makeService({
+        ...RESEND_ENV,
+        ADMIN_APP_URL: adminAppUrl,
+      });
+      service.onModuleInit();
+      await service.sendAccountInvitation(invite);
+      return sentText();
+    }
+
+    async function sendResetWith(adminAppUrl: string): Promise<string> {
+      mockResendSend.mockResolvedValue({ data: { id: 'msg' }, error: null });
+      const service = makeService({
+        ...RESEND_ENV,
+        ADMIN_APP_URL: adminAppUrl,
+      });
+      service.onModuleInit();
+      await service.sendPasswordResetEmail(reset);
+      return sentText();
+    }
+
+    // --- A. Base ở GỐC: hành vi cũ phải giữ NGUYÊN -------------------------
+    describe('base ở gốc — hành vi cũ không đổi', () => {
+      it('link thiết lập: https://admin.example.com/thiet-lap-tai-khoan', async () => {
+        const text = await sendInviteWith('https://admin.example.com');
+        expect(text).toContain(
+          `https://admin.example.com/thiet-lap-tai-khoan?token=${SETUP_TOKEN}`,
+        );
+      });
+
+      it('link đặt lại: https://admin.example.com/dat-lai-mat-khau', async () => {
+        const text = await sendResetWith('https://admin.example.com');
+        expect(text).toContain(
+          `https://admin.example.com/dat-lai-mat-khau?token=${RESET_TOKEN}`,
+        );
+      });
+    });
+
+    // --- B. Base có SUB-PATH: tiền tố phải được GIỮ ------------------------
+    describe('base có sub-path — tiền tố được giữ', () => {
+      const SUBPATH_BASE = 'https://www.thienduccons.vn/admin';
+
+      it('link thiết lập giữ tiền tố /admin', async () => {
+        const text = await sendInviteWith(SUBPATH_BASE);
+        expect(text).toContain(
+          `https://www.thienduccons.vn/admin/thiet-lap-tai-khoan?token=${SETUP_TOKEN}`,
+        );
+        // Bẫy cũ: /admin bị nuốt → link rơi thẳng về gốc website công khai.
+        expect(text).not.toContain(
+          'https://www.thienduccons.vn/thiet-lap-tai-khoan',
+        );
+      });
+
+      it('link đặt lại giữ tiền tố /admin', async () => {
+        const text = await sendResetWith(SUBPATH_BASE);
+        expect(text).toContain(
+          `https://www.thienduccons.vn/admin/dat-lai-mat-khau?token=${RESET_TOKEN}`,
+        );
+        expect(text).not.toContain(
+          'https://www.thienduccons.vn/dat-lai-mat-khau',
+        );
+      });
+
+      it('base có dấu / cuối cũng không nhân đôi dấu gạch', async () => {
+        const text = await sendInviteWith(`${SUBPATH_BASE}/`);
+        expect(text).toContain(
+          `https://www.thienduccons.vn/admin/thiet-lap-tai-khoan?token=${SETUP_TOKEN}`,
+        );
+        expect(text).not.toContain('/admin//');
+      });
+
+      it('sub-path nhiều tầng cũng được giữ nguyên', async () => {
+        const text = await sendResetWith('https://example.com/cms/quan-tri');
+        expect(text).toContain(
+          `https://example.com/cms/quan-tri/dat-lai-mat-khau?token=${RESET_TOKEN}`,
+        );
+      });
+    });
+  });
 });

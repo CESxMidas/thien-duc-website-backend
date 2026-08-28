@@ -5,6 +5,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -78,5 +79,28 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  /**
+   * Người dùng ĐANG ĐĂNG NHẬP tự đổi mật khẩu của chính mình.
+   *
+   * Mọi vai trò (EDITOR/ADMIN/SUPER_ADMIN) đều được đổi mật khẩu CỦA CHÍNH
+   * MÌNH — không có `@Roles(...)`. Danh tính lấy từ JWT qua `@CurrentUser()`,
+   * KHÔNG nhận `userId` từ body/param, nên không ai đổi được mật khẩu người
+   * khác qua route này (kể cả SUPER_ADMIN).
+   *
+   * Throttle 5 lần / 15 phút — bằng đúng `reset-password` và `forgot-password`:
+   * đây cũng là một endpoint nhận mật khẩu và có nhánh so khớp bí mật, để rơi
+   * về mức toàn cục (100/60s) là quá lỏng cho việc dò `currentPassword`.
+   */
+  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  changePassword(
+    @CurrentUser() user: { id: string },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.id, dto);
   }
 }

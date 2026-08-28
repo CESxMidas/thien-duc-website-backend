@@ -18,6 +18,7 @@ import {
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -488,6 +489,112 @@ export class AuthService {
     return {
       success: true,
       message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.',
+    };
+  }
+
+  /**
+   * Người dùng ĐANG ĐĂNG NHẬP tự đổi mật khẩu của chính mình.
+   *
+   * Khác hẳn ba luồng mật khẩu còn lại: không có token email, chính chủ chứng
+   * minh danh tính bằng `currentPassword`. `userId` LUÔN đến từ JWT
+   * (`@CurrentUser()`), không bao giờ từ body — xem `ChangePasswordDto`.
+   *
+   * CỐ Ý KHÔNG đi qua `PATCH /users/me`: route đó đưa EDITOR vào luồng
+   * `ProfileChangeRequest` chờ quản trị viên duyệt. Mật khẩu phải có hiệu lực
+   * NGAY, và quản trị viên không được dính vào quy trình mật khẩu của người
+   * khác — đúng nguyên tắc mà `UpdateUserDto` đang bảo vệ.
+   *
+   * PHIÊN SAU KHI ĐỔI: thu hồi TOÀN BỘ refresh token của tài khoản (kể cả
+   * phiên đang thao tác) và KHÔNG cấp token thay thế — client tự dọn token rồi
+   * đăng nhập lại bằng mật khẩu mới. Lý do: người ta đổi mật khẩu thường vì
+   * nghi bị lộ, giữ lại phiên nào cũng là bỏ lỡ mục đích.
+   *
+   * ⚠️ GIỚI HẠN ĐÃ BIẾT: access token là JWT thuần trạng thái và schema KHÔNG
+   * có `tokenVersion`, nên access token đã phát trên thiết bị khác VẪN dùng
+   * được tới khi hết hạn tự nhiên (`JWT_ACCESS_EXPIRES_IN`, mặc định 15 phút).
+   * Thu hồi refresh token chặn việc gia hạn, nên cửa sổ tối đa là đúng 15 phút.
+   * Muốn cắt tức thì thì phải thêm `tokenVersion` — thay đổi schema, không nằm
+   * trong phạm vi tính năng này.
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    // Cùng khuôn với resetPassword/acceptInvitation: đối chiếu xác nhận ở
+    // service chứ không ở DTO (class-validator không so được hai field).
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        passwordHash: true,
+        isActive: true,
+        setupCompletedAt: true,
+      },
+    });
+
+    // Token còn hạn nhưng tài khoản đã bị xóa khỏi DB — giống getProfile().
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy tài khoản');
+    }
+    if (!user.isActive || user.setupCompletedAt === null) {
+      throw new BadRequestException(
+        'Tài khoản không ở trạng thái đổi được mật khẩu.',
+      );
+    }
+
+    // 400 chứ KHÔNG phải 401/403: Admin CMS đã gán sẵn ngữ nghĩa cho hai mã đó
+    // (401 = phiên hết hạn → xóa token + đá về trang đăng nhập; 403 = không đủ
+    // quyền → toast "Bạn không có quyền..."). Trả 401/403 ở đây sẽ đăng xuất
+    // người chỉ gõ nhầm mật khẩu.
+    const currentValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!currentValid) {
+      throw new BadRequestException('Mật khẩu hiện tại không đúng.');
+    }
+
+    // So bằng bcrypt với hash đang lưu — KHÔNG so plaintext mới với plaintext
+    // cũ (bắt được cả trường hợp gõ khác nhau nhưng cùng một mật khẩu).
+    const sameAsCurrent = await bcrypt.compare(
+      dto.newPassword,
+      user.passwordHash,
+    );
+    if (sameAsCurrent) {
+      throw new BadRequestException(
+        'Mật khẩu mới phải khác mật khẩu hiện tại.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+    const now = new Date();
+
+    // Đổi mật khẩu và thu hồi phiên phải NGUYÊN TỬ: đổi được mật khẩu mà không
+    // thu hồi được phiên nghĩa là kẻ đang cầm refresh token vẫn vào được bằng
+    // phiên cũ. Không gọi `revokeAllTokens()` ở đây vì nó dùng `this.prisma`
+    // ngoài transaction nên sẽ KHÔNG rollback cùng — đúng lý do đã ghi ở
+    // `resetPassword`.
+    await this.prisma.$transaction(async (tx) => {
+      // Chỉ chạm passwordHash — không đụng role/email/hồ sơ/isActive, và cũng
+      // KHÔNG chạm lockedUntil (không tự mở khóa tài khoản đang bị khóa).
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
+
+    // Chỉ log ID — không log mật khẩu, không log hash, không log body.
+    this.logger.log(`password_changed userId=${user.id}`);
+
+    return {
+      success: true,
+      message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
     };
   }
 

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -900,6 +901,222 @@ describe('AuthService', () => {
       const rejected = results.filter((r) => r.status === 'rejected');
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
+    });
+  });
+
+  describe('changePassword', () => {
+    const dto = {
+      currentPassword: 'MatKhauCu123',
+      newPassword: 'MatKhauMoi456',
+      confirmPassword: 'MatKhauMoi456',
+    };
+    const eligibleUser = {
+      id: 'user-1',
+      passwordHash: 'hashed',
+      isActive: true,
+      setupCompletedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    /**
+     * Happy path: `currentPassword` khớp (lần compare #1 = true) và
+     * `newPassword` KHÁC mật khẩu hiện tại (lần compare #2 = false).
+     */
+    function armHappyPath() {
+      prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      mockedCompare.mockResolvedValueOnce(true); // currentPassword đúng
+      mockedCompare.mockResolvedValueOnce(false); // newPassword khác cũ
+      prisma.user.update.mockResolvedValue({});
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+    }
+
+    it('đổi được mật khẩu khi mật khẩu hiện tại đúng', async () => {
+      armHappyPath();
+
+      const result = await service.changePassword('user-1', dto);
+
+      expect(result).toEqual({
+        success: true,
+        message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
+      });
+    });
+
+    it('lưu mật khẩu mới dưới dạng hash bcrypt cost 12, không lưu bản rõ', async () => {
+      armHappyPath();
+
+      await service.changePassword('user-1', dto);
+
+      expect(mockedHash).toHaveBeenCalledWith(dto.newPassword, 12);
+      const updated = firstCallArg<{ data: { passwordHash: string } }>(
+        prisma.user.update,
+      );
+      expect(updated.data.passwordHash).toBe('hashed-new-password');
+      expect(updated.data.passwordHash).not.toBe(dto.newPassword);
+      // Chỉ chạm passwordHash — không role/email/isActive/lockedUntil.
+      expect(Object.keys(updated.data)).toEqual(['passwordHash']);
+    });
+
+    it('thu hồi TOÀN BỘ refresh token của tài khoản khi đổi thành công', async () => {
+      armHappyPath();
+
+      await service.changePassword('user-1', dto);
+
+      const revoke = firstCallArg<{
+        where: { userId: string; revokedAt: null };
+      }>(prisma.refreshToken.updateMany);
+      expect(revoke.where.userId).toBe('user-1');
+      expect(revoke.where.revokedAt).toBeNull();
+    });
+
+    it('đổi mật khẩu + thu hồi phiên nằm trong CÙNG một transaction', async () => {
+      armHappyPath();
+
+      await service.changePassword('user-1', dto);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('KHÔNG trả về passwordHash / mật khẩu / token nào', async () => {
+      armHappyPath();
+
+      const result = await service.changePassword('user-1', dto);
+
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('hashed');
+      expect(serialized).not.toContain(dto.newPassword);
+      expect(serialized).not.toContain(dto.currentPassword);
+      expect(Object.keys(result).sort()).toEqual(['message', 'success']);
+    });
+
+    it('mật khẩu hiện tại SAI thì ném 400 BadRequest (không phải 401/403)', async () => {
+      prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      mockedCompare.mockResolvedValueOnce(false); // currentPassword sai
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('mật khẩu hiện tại sai thì KHÔNG ghi DB và KHÔNG thu hồi phiên', async () => {
+      prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      mockedCompare.mockResolvedValueOnce(false);
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mật khẩu mới TRÙNG mật khẩu hiện tại thì ném 400, không ghi DB', async () => {
+      prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      mockedCompare.mockResolvedValueOnce(true); // currentPassword đúng
+      mockedCompare.mockResolvedValueOnce(true); // newPassword trùng cũ
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('so trùng mật khẩu cũ bằng bcrypt với hash, KHÔNG so plaintext', async () => {
+      prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      mockedCompare.mockResolvedValueOnce(true);
+      mockedCompare.mockResolvedValueOnce(true);
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      // Lần compare thứ hai là (newPassword, passwordHash) — không phải
+      // (newPassword, currentPassword).
+      expect(mockedCompare).toHaveBeenNthCalledWith(
+        2,
+        dto.newPassword,
+        eligibleUser.passwordHash,
+      );
+    });
+
+    it('confirmPassword không khớp thì ném 400, không đọc DB', async () => {
+      await expect(
+        service.changePassword('user-1', { ...dto, confirmPassword: 'khac' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('token còn hạn nhưng tài khoản đã bị xóa thì ném 404, không ghi DB', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('tài khoản đã bị vô hiệu hóa thì ném 400, không ghi DB', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...eligibleUser,
+        isActive: false,
+      });
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('tài khoản chưa hoàn tất thiết lập thì ném 400, không ghi DB', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...eligibleUser,
+        setupCompletedAt: null,
+      });
+
+      await expect(service.changePassword('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('chỉ đọc/ghi ĐÚNG userId được truyền vào, bỏ qua userId lạ trong dto', async () => {
+      armHappyPath();
+
+      // `dto` cố tình kèm userId lạ: service phải bỏ qua hoàn toàn.
+      await service.changePassword('user-1', {
+        ...dto,
+        userId: 'user-khac',
+      } as unknown as typeof dto);
+
+      const read = firstCallArg<{ where: { id: string } }>(
+        prisma.user.findUnique,
+      );
+      expect(read.where.id).toBe('user-1');
+      const updated = firstCallArg<{ where: { id: string } }>(
+        prisma.user.update,
+      );
+      expect(updated.where.id).toBe('user-1');
+      const revoked = firstCallArg<{ where: { userId: string } }>(
+        prisma.refreshToken.updateMany,
+      );
+      expect(revoked.where.userId).toBe('user-1');
+    });
+
+    it('select chỉ lấy đúng field cần thiết, không kéo theo email/role/name', async () => {
+      armHappyPath();
+
+      await service.changePassword('user-1', dto);
+
+      const read = firstCallArg<{ select: Record<string, boolean> }>(
+        prisma.user.findUnique,
+      );
+      // passwordHash cần cho bcrypt.compare, nhưng KHÔNG lấy kèm email/role/
+      // name để không vô tình lọt vào log hay response.
+      expect(Object.keys(read.select).sort()).toEqual([
+        'id',
+        'isActive',
+        'passwordHash',
+        'setupCompletedAt',
+      ]);
     });
   });
 });

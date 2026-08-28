@@ -320,7 +320,8 @@ export class UsersService {
 
     // Không có nhánh đổi mật khẩu ở đây: `UpdateUserDto` không khai báo
     // `password`, và ValidationPipe (`forbidNonWhitelisted`) chặn 400 nếu client
-    // vẫn gửi. Mật khẩu chỉ do chính chủ đặt (lời mời / quên mật khẩu).
+    // vẫn gửi. Mật khẩu chỉ do chính chủ đặt (lời mời /
+    // đổi mật khẩu / quên mật khẩu).
     // Chỉ lấy đúng field được phép — hàng rào thứ hai, không phụ thuộc vào việc
     // ValidationPipe có chạy hay không (ví dụ khi gọi service trực tiếp).
     const data: {

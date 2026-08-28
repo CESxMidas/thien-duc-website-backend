@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
@@ -36,6 +37,9 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
         .mockResolvedValue({ success: true, message: 'neutral' }),
       validatePasswordReset: jest.fn().mockResolvedValue({ valid: true }),
       resetPassword: jest
+        .fn()
+        .mockResolvedValue({ success: true, message: 'ok' }),
+      changePassword: jest
         .fn()
         .mockResolvedValue({ success: true, message: 'ok' }),
     };
@@ -233,6 +237,86 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
     it('should have a 5 requests / 15 minutes throttle configured', () => {
       expect(5).toBe(5);
       expect(15 * 60 * 1000).toBe(900000);
+    });
+  });
+
+  describe('change-password endpoint', () => {
+    const dto = {
+      currentPassword: 'MatKhauCu123',
+      newPassword: 'MatKhauMoi456',
+      confirmPassword: 'MatKhauMoi456',
+    };
+
+    it('truyền userId lấy từ JWT (@CurrentUser) chứ không phải từ body', async () => {
+      await controller.changePassword({ id: 'user-tu-jwt' }, dto);
+
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        'user-tu-jwt',
+        dto,
+      );
+    });
+
+    it('bỏ qua userId lạ gửi kèm trong body — danh tính chỉ từ JWT', async () => {
+      await controller.changePassword({ id: 'user-tu-jwt' }, {
+        ...dto,
+        userId: 'user-khac',
+      } as unknown as typeof dto);
+
+      const [passedUserId] = (authService.changePassword as jest.Mock).mock
+        .calls[0] as [string];
+      expect(passedUserId).toBe('user-tu-jwt');
+    });
+
+    it('trả nguyên kết quả của service theo envelope hiện hành', async () => {
+      const result = await controller.changePassword({ id: 'user-1' }, dto);
+
+      expect(result).toEqual({ success: true, message: 'ok' });
+    });
+
+    /**
+     * Chỉ dùng làm ĐÍCH ĐỌC METADATA của decorator (`Reflect.getMetadata`),
+     * không bao giờ gọi — nên `unbound-method` ở đây là báo động giả.
+     */
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const handler = AuthController.prototype.changePassword;
+
+    it('được bảo vệ bởi JwtAuthGuard', () => {
+      const guards = Reflect.getMetadata('__guards__', handler) as
+        Array<new (...args: unknown[]) => unknown> | undefined;
+
+      expect(guards).toBeDefined();
+      expect(guards?.map((g) => g.name)).toContain('JwtAuthGuard');
+    });
+
+    it('khai báo throttle 5 lần / 15 phút (không rơi về mức toàn cục)', () => {
+      // Đọc metadata THẬT do @Throttle gắn (nestjs/throttler lưu limit và ttl
+      // thành hai key riêng, hậu tố là tên nhóm — ở đây là "default"), thay vì
+      // khẳng định hằng số suông kiểu expect(5).toBe(5).
+      const limit = Reflect.getMetadata(
+        'THROTTLER:LIMITdefault',
+        handler,
+      ) as number;
+      const ttl = Reflect.getMetadata(
+        'THROTTLER:TTLdefault',
+        handler,
+      ) as number;
+
+      expect(limit).toBe(5);
+      expect(ttl).toBe(15 * 60 * 1000);
+    });
+
+    it('lỗi "mật khẩu hiện tại sai" giữ nguyên 400, KHÔNG bị đổi thành 401/403', async () => {
+      const badRequest = new BadRequestException(
+        'Mật khẩu hiện tại không đúng.',
+      );
+      (authService.changePassword as jest.Mock).mockRejectedValueOnce(
+        badRequest,
+      );
+
+      await expect(
+        controller.changePassword({ id: 'user-1' }, dto),
+      ).rejects.toMatchObject({ status: 400 });
     });
   });
 });

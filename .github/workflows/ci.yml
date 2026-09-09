@@ -21,11 +21,15 @@ jobs:
 
       - run: npx prisma generate
 
-      - run: npm run lint
+      - run: npm run lint:check
+
+      - run: npm run typecheck
+
+      - run: npm test
 
       - run: npm run build
 
-      - run: npm test
+      - run: npm run prisma:validate
 
   # E2E smoke (task →8): Postgres dùng một lần trong CI — credentials bên dưới
   # là giá trị vứt đi của service container, KHÔNG phải secret production.
@@ -102,7 +106,7 @@ jobs:
       - name: Preflight môi trường E2E
         run: npm run e2e:preflight
 
-      - run: npx prisma validate
+      - run: npm run prisma:validate
 
       - run: npx prisma generate
 

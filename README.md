@@ -1,68 +1,93 @@
-# thien-duc-website-backend
+# Thiên Đức — Backend API
 
-Backend NestJS + Prisma + PostgreSQL cho website Thiên Đức (PA2). Xem kế hoạch tổng ở
-`../thien-duc-website-docs/04-implementation/implementation-plan.md` và các câu hỏi chờ công ty xác nhận ở
-`../thien-duc-website-docs/01-requirements/open-questions.md`. Quy ước code dùng chung cho
-frontend / admin / backend: `../AGENTS.md`.
+NestJS 11 + Prisma 7 + PostgreSQL cho website và Admin CMS Thiên Đức.
 
-## Modules
+## Local Development
 
-`auth`, `users`, `projects` (+ `project_items`, `project_gallery`), `news` (+ `news_categories`),
-`pages`, `banners`, `contact`, `media` — theo ERD 12 bảng ở Sprint 0.
+### Yêu cầu
 
-Nội dung song ngữ (title/summary/description/...) lưu dạng JSON `{ vi: string; en?: string }` để sẵn
-sàng cho Sprint 4 (song ngữ) mà không cần đổi schema.
-
-## Bắt đầu
+- Node.js **22.x LTS** (nguồn chuẩn: `.nvmrc` và `package.json#engines`).
+- npm với `package-lock.json`; không dùng Yarn/pnpm.
+- Docker Desktop/Compose để chạy PostgreSQL local, hoặc PostgreSQL tương thích.
 
 ```bash
-cp .env.example .env   # điền DATABASE_URL, JWT_ACCESS_SECRET thật
-npm install
-npx prisma migrate dev --name init
+nvm use
+npm ci
+cp .env.example .env
+docker compose up -d
+npm run prisma:generate
+npx prisma migrate dev
 npm run start:dev
 ```
 
-- API: `http://localhost:3001/api`
-- Swagger: `http://localhost:3001/api/docs`
+PostgreSQL local: `localhost:5433`, database `thien_duc`. API:
+`http://localhost:3001/api`; Swagger chỉ ở development:
+`http://localhost:3001/api/docs`.
 
-Postgres local chạy bằng Docker ở **port 5433** (`docker compose up -d`) vì máy dev
-đã có Postgres Windows chiếm 5432.
+`.env.example` giải thích từng biến. Tối thiểu local cần `DATABASE_URL`,
+`JWT_ACCESS_SECRET` và `CORS_ORIGIN`; Cloudinary, Resend và Sentry tùy tính năng.
+Không dùng giá trị production trong file local và không commit `.env*` (trừ
+`.env.example`).
 
-> ⚠️ Nối DB từ ngoài Render **bắt buộc** có `?sslmode=require` trong `DATABASE_URL`
-> (adapter `@prisma/adapter-pg` không tự bật SSL) — thiếu là mọi route chạm DB trả
-> `500` với thông báo đánh lạc hướng. Prisma CLI vẫn chạy được nên đừng lấy nó làm
-> bằng chứng DB ổn. Chi tiết: `../thien-duc-website-docs/07-deployment/deployment-guide.md`.
+### Prisma và seed
 
-## Quy ước
+```bash
+npx prisma migrate dev --name <ten-migration>
+npm run prisma:generate
+npm run prisma:validate
+npm run prisma:seed
+npm run prisma:seed:projects
+npm run prisma:seed:news
+npm run prisma:seed:pages
+npm run prisma:seed:banners
+npm run prisma:seed:cooperation
+```
 
-- Response envelope thống nhất: `{success, data, message}` /
-  `{success:false, error:{code, message, details}}` — xem `common/interceptors/`
-  và `common/filters/`.
-- `ValidationPipe` bật `whitelist` + `forbidNonWhitelisted`: field không có trong
-  DTO bị **reject 400** chứ không bị bỏ qua.
-- Route công khai chỉ trả nội dung `PUBLISHED`; bản `DRAFT`/`PENDING` đi qua
-  `GET /<module>/admin` có `JwtAuthGuard` + `RolesGuard`.
-- Slug trùng trả `409`, không để rơi thành `500`.
+`prisma:seed` tạo tài khoản bootstrap từ `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Không
+sửa migration đã áp dụng. Production dùng `npx prisma migrate deploy`, không
+dùng `migrate reset`. Xem [quy trình migration](../thien-duc-website-docs/07-deployment/database-migrations.md).
 
-## Việc còn thiếu, chờ input công ty
+### Kiểm tra và build
 
-- ~~SMTP cho thông báo form liên hệ~~ **đã xong** (câu 9): email đi qua **Resend
-  HTTPS API** (gói `resend`), **không phải SMTP**. Cần `RESEND_API_KEY`,
-  `MAIL_FROM`, `CONTACT_NOTIFY_TO` — secret chỉ nằm phía server, không bao giờ
-  đặt tiền tố `NEXT_PUBLIC_` / `VITE_`. `contact.service.ts` **lưu lead trước**
-  rồi mới gửi và **không `await`**: thiếu cấu hình hay Resend lỗi thì chỉ ghi log
-  cảnh báo, lead đã lưu và request vẫn trả `201`. Rate-limit 5 req/IP/giờ giữ
-  nguyên; khách có để email thì đặt `replyTo` để trả lời thẳng.
-- ~~Cloudinary~~ **đã xong** (câu 12): cloud name `ksnntvmu`, `POST /media/upload`
-  ép WebP + giới hạn 1200px, `DELETE /media/:id` xóa trên cloud trước.
-- ~~Hosting/DB~~ **đã chốt** (câu 11): Render (BE + Postgres) + Vercel (FE).
+```bash
+npm run lint
+npm run lint:check
+npm run typecheck
+npm run test
+npm run build
+npm run prisma:validate
+```
 
-## Script
+E2E chỉ được chạy với database local an toàn tên `thien_duc_test`, tuyệt đối
+không trỏ vào production:
 
-- `npm run start:dev` — chạy dev với watch mode.
-- `npm run build` — build production (`dist/`).
-- `npm run lint` — eslint (auto-fix).
-- `npm run test` / `npm run test:e2e` — unit / e2e test (e2e cần DB Postgres chạy sẵn).
-- `npm run prisma:seed` — tạo tài khoản `SUPER_ADMIN` đầu tiên.
-- `npm run prisma:seed:projects` / `prisma:seed:news` — seed dữ liệu thật (idempotent).
-- `npx prisma studio` — xem/sửa dữ liệu qua UI.
+```bash
+npm run e2e:preflight
+npm run test:e2e
+```
+
+## CI/CD
+
+GitHub Actions chạy khi push lên `main` và khi có pull request vào `main`:
+`npm ci` → Prisma generate → lint không tự sửa → typecheck → unit test → build
+→ Prisma validate. Job E2E riêng dựng PostgreSQL 17 dùng một lần, migrate/seed
+dữ liệu test rồi chạy E2E.
+
+CI chỉ xác thực mã, không dùng secret hay database production. Render vẫn triển
+khai từ Git; việc provider có chờ CI hay không phụ thuộc cấu hình dashboard và
+branch protection. Chi tiết: [CI/CD](../thien-duc-website-docs/07-deployment/ci-cd.md).
+
+## Deployment / Handover
+
+- Production API: `https://thien-duc-website-backend-w1du.onrender.com/api`.
+- `render.yaml` khai nhánh `main`, `npm ci && npm run build`,
+  `npx prisma migrate deploy && npm run start:prod` và health path `/api`.
+- Render auto-deploy theo Git khi dashboard/Blueprint đang kết nối đúng.
+- Kiểm tra sau deploy: `/api` và route công khai trả 200; `/api/users` không
+  token trả 401; Swagger production trả 404.
+
+Env production nhập tại Render, không nằm trong Git. Quy trình đầy đủ:
+[deployment](../thien-duc-website-docs/07-deployment/deployment-guide.md),
+[rollback](../thien-duc-website-docs/07-deployment/rollback-plan.md),
+[backup/restore](../thien-duc-website-docs/07-deployment/backup-and-restore.md) và
+[monitoring](../thien-duc-website-docs/07-deployment/monitoring-and-alerting.md).

@@ -37,7 +37,9 @@ services:
     # migrate deploy chạy trước khi start mỗi lần deploy (idempotent, an toàn free tier).
     startCommand: npx prisma migrate deploy && npm run start:prod
     healthCheckPath: /api
-    autoDeploy: true
+    # Chỉ cho phép deploy sau khi toàn bộ GitHub CI checks của commit đã đạt.
+    # Render cũng không deploy nếu không phát hiện check nào cho commit.
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION
         value: "22"

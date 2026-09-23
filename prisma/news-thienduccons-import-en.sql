@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Bo sung ban tieng Anh (en) cho 18 bai tin tuc da import tu thienduccons.vn
+-- Bo sung ban tieng Anh (en) cho 18 bai tin tuc da import tu www.thienduccons.vn
 -- va cho 4 chuyen muc trong news_categories.
 --
 -- File nay KHONG chep lai noi dung tieng Viet. No chi chua chuoi EN va ghep
@@ -589,7 +589,7 @@ WHERE slug = 'le-khoi-cong-khu-do-thi-hung-phu-ben-tre-ngay-20-9';
 --        (summary->>'en' IS NULL) AS thieu_summary_en,
 --        (SELECT count(*) FROM jsonb_array_elements(content) e WHERE e->>'en' IS NULL) AS so_doan_thieu_en
 --   FROM news_posts
---  WHERE image LIKE 'https://thienduccons.vn/img_data/%'
+--  WHERE image LIKE 'https://www.thienduccons.vn/img_data/%'
 --    AND (title->>'en' IS NULL OR summary->>'en' IS NULL
 --         OR EXISTS (SELECT 1 FROM jsonb_array_elements(content) e WHERE e->>'en' IS NULL));
 

@@ -210,7 +210,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
     const INVITE_ONLY_ENV = {
       RESEND_API_KEY: 're_test_key',
       MAIL_FROM: 'Thiên Đức <onboarding@resend.dev>',
-      ADMIN_APP_URL: 'https://admin.thienduc.vn',
+      ADMIN_APP_URL: 'https://www.thienduccons.vn/admin',
       // KHÔNG có CONTACT_NOTIFY_TO.
     };
     const CONTACT_ONLY_ENV = {
@@ -274,7 +274,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
     it('thiếu RESEND_API_KEY: cả hai loại email đều no-op', async () => {
       const service = makeService({
         ...RESEND_ENV,
-        ADMIN_APP_URL: 'https://admin.thienduc.vn',
+        ADMIN_APP_URL: 'https://www.thienduccons.vn/admin',
         RESEND_API_KEY: undefined,
       });
       service.onModuleInit();
@@ -291,7 +291,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
     it('thiếu MAIL_FROM: cả hai loại email đều no-op', async () => {
       const service = makeService({
         ...RESEND_ENV,
-        ADMIN_APP_URL: 'https://admin.thienduc.vn',
+        ADMIN_APP_URL: 'https://www.thienduccons.vn/admin',
         MAIL_FROM: undefined,
       });
       service.onModuleInit();
@@ -310,7 +310,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
   describe('sendAccountInvitation', () => {
     const INVITE_ENV = {
       ...RESEND_ENV,
-      ADMIN_APP_URL: 'https://admin.thienduc.vn',
+      ADMIN_APP_URL: 'https://www.thienduccons.vn/admin',
     };
     const RAW_TOKEN = 'raw-invitation-token-abc123';
     const invite = {
@@ -371,7 +371,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
         text: string;
         html: string;
       };
-      const expectedUrl = `https://admin.thienduc.vn/thiet-lap-tai-khoan?token=${RAW_TOKEN}`;
+      const expectedUrl = `https://www.thienduccons.vn/admin/thiet-lap-tai-khoan?token=${RAW_TOKEN}`;
       expect(payload.text).toContain(expectedUrl);
       expect(payload.html).toContain(`token=${RAW_TOKEN}`);
       expectNoTokenOrUrlLeaked();
@@ -410,7 +410,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
     it('ADMIN_APP_URL http không phải localhost → bỏ qua (không hợp lệ)', async () => {
       const service = makeService({
         ...RESEND_ENV,
-        ADMIN_APP_URL: 'http://admin.thienduc.vn',
+        ADMIN_APP_URL: 'http://www.thienduccons.vn/admin',
       });
       service.onModuleInit();
 
@@ -449,7 +449,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
         // HTTP ở production → từ chối.
         const httpService = makeService({
           ...RESEND_ENV,
-          ADMIN_APP_URL: 'http://admin.thienduc.vn',
+          ADMIN_APP_URL: 'http://www.thienduccons.vn/admin',
         });
         httpService.onModuleInit();
         await httpService.sendAccountInvitation(invite);
@@ -544,7 +544,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
   describe('sendPasswordResetEmail', () => {
     const RESET_ENV = {
       ...RESEND_ENV,
-      ADMIN_APP_URL: 'https://admin.thienduc.vn',
+      ADMIN_APP_URL: 'https://www.thienduccons.vn/admin',
     };
     const RAW_TOKEN = 'raw-reset-token-xyz789';
     const reset = {
@@ -584,7 +584,7 @@ describe('MailService — cấu hình Resend & degrade an toàn', () => {
       expect(payload.from).toBe(RESET_ENV.MAIL_FROM);
       expect(payload.subject).toBe('Đặt lại mật khẩu CMS');
       // URL đặt lại dựng từ ADMIN_APP_URL, chứa token, nằm TRONG email.
-      const expectedUrl = `https://admin.thienduc.vn/dat-lai-mat-khau?token=${RAW_TOKEN}`;
+      const expectedUrl = `https://www.thienduccons.vn/admin/dat-lai-mat-khau?token=${RAW_TOKEN}`;
       expect(payload.text).toContain(expectedUrl);
       expect(payload.html).toContain(`token=${RAW_TOKEN}`);
       // Nhắc hết hạn 20 phút, dùng một lần, và bỏ qua nếu không yêu cầu.

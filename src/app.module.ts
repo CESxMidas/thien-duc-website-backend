@@ -17,6 +17,7 @@ import { CooperationModule } from './cooperation/cooperation.module';
 import { ContactModule } from './contact/contact.module';
 import { MediaModule } from './media/media.module';
 import { SearchModule } from './search/search.module';
+import { SettingsModule } from './settings/settings.module';
 import { TestSupportModule } from './test-support/test-support.module';
 
 /**
@@ -46,6 +47,7 @@ const testSupportModules =
     ContactModule,
     MediaModule,
     SearchModule,
+    SettingsModule,
     ...testSupportModules,
   ],
   controllers: [AppController],

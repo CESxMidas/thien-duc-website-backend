@@ -94,7 +94,10 @@ export class ProjectsService {
         : undefined,
       orderBy: { order: 'asc' },
       include: {
-        items: { orderBy: BY_ORDER },
+        items: {
+          where: publishedOnly ? { isActive: true } : undefined,
+          orderBy: BY_ORDER,
+        },
         _count: { select: { galleryImages: true } },
       },
     });
@@ -113,8 +116,14 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({
       where: { slug },
       include: {
-        items: { orderBy: BY_ORDER },
-        galleryImages: { orderBy: BY_ORDER },
+        items: {
+          where: publishedOnly ? { isActive: true } : undefined,
+          orderBy: BY_ORDER,
+        },
+        galleryImages: {
+          where: publishedOnly ? { isActive: true } : undefined,
+          orderBy: BY_ORDER,
+        },
       },
     });
     if (
@@ -155,8 +164,17 @@ export class ProjectsService {
   ) {
     const project = await this.findBySlug(projectSlug, publishedOnly);
     const item = await this.prisma.projectItem.findFirst({
-      where: { projectId: project.id, slug: itemSlug },
-      include: { galleryImages: { orderBy: BY_ORDER } },
+      where: {
+        projectId: project.id,
+        slug: itemSlug,
+        ...(publishedOnly ? { isActive: true } : {}),
+      },
+      include: {
+        galleryImages: {
+          where: publishedOnly ? { isActive: true } : undefined,
+          orderBy: BY_ORDER,
+        },
+      },
     });
     if (!item) throw new NotFoundException('Không tìm thấy hạng mục dự án');
     return { project, item };
@@ -434,8 +452,14 @@ export class ProjectsService {
   async remove(slug: string) {
     const project = await this.findBySlug(slug);
     // Hạng mục và ảnh gallery xóa theo cascade (khai báo ở schema.prisma).
-    await this.prisma.project.delete({ where: { id: project.id } });
-    return { deleted: true };
+    await this.prisma.project.update({
+      where: { id: project.id },
+      data: {
+        contentStatus: ContentStatus.DRAFT,
+        scheduledAt: null,
+      },
+    });
+    return { hidden: true };
   }
 
   /* ----------------------------- Hạng mục con ----------------------------- */
@@ -518,8 +542,11 @@ export class ProjectsService {
       itemSlug,
     );
     this.assertChildEditAllowed(project, actorRole);
-    await this.prisma.projectItem.delete({ where: { id: item.id } });
-    return { deleted: true };
+    await this.prisma.projectItem.update({
+      where: { id: item.id },
+      data: { isActive: false },
+    });
+    return { hidden: true };
   }
 
   /* ------------------------------- Thư viện ảnh ---------------------------- */
@@ -527,7 +554,10 @@ export class ProjectsService {
   async findGallery(projectSlug: string, publishedOnly = false) {
     const project = await this.findBySlug(projectSlug, publishedOnly);
     return this.prisma.projectGalleryImage.findMany({
-      where: { projectId: project.id },
+      where: {
+        projectId: project.id,
+        ...(publishedOnly ? { isActive: true } : {}),
+      },
       orderBy: BY_ORDER,
     });
   }
@@ -600,8 +630,11 @@ export class ProjectsService {
       imageId,
     );
     this.assertChildEditAllowed(project, actorRole);
-    await this.prisma.projectGalleryImage.delete({ where: { id: image.id } });
-    return { deleted: true };
+    await this.prisma.projectGalleryImage.update({
+      where: { id: image.id },
+      data: { isActive: false },
+    });
+    return { hidden: true };
   }
 
   /**

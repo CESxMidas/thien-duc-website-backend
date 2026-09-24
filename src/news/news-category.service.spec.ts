@@ -1,8 +1,7 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ContentStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { NewsService } from './news.service';
 
 /**
@@ -246,56 +245,39 @@ describe('NewsService — chuyên mục', () => {
   });
 
   describe('xóa chuyên mục', () => {
-    it('chuyên mục KHÔNG còn bài: xóa bình thường', async () => {
+    it('ẩn chuyên mục bằng isActive=false, không xóa bản ghi', async () => {
       prisma.newsCategory.findUnique.mockResolvedValue(categories[1]);
-      prisma.newsPost.count.mockResolvedValue(0);
 
       await expect(service.removeCategory('tin-cong-ty')).resolves.toEqual({
-        deleted: true,
+        hidden: true,
       });
-      expect(prisma.newsCategory.delete).toHaveBeenCalledTimes(1);
-    });
-
-    it('chuyên mục CÒN bài: 409, KHÔNG chạm database', async () => {
-      prisma.newsCategory.findUnique.mockResolvedValue(categories[2]);
-      prisma.newsPost.count.mockResolvedValue(5);
-
-      await expect(service.removeCategory('tin-kien-truc')).rejects.toThrow(
-        ConflictException,
-      );
-      // Điều quan trọng nhất: `delete` không được gọi, nên `SetNull` không chạy.
+      expect(prisma.newsCategory.update).toHaveBeenCalledWith({
+        where: { id: 'c2' },
+        data: { isActive: false },
+      });
       expect(prisma.newsCategory.delete).not.toHaveBeenCalled();
     });
 
-    it('lỗi 409 mang mã máy đọc được + số bài', async () => {
+    it('chuyên mục CÒN bài vẫn ẩn được vì không gỡ nhãn khỏi bài', async () => {
       prisma.newsCategory.findUnique.mockResolvedValue(categories[2]);
       prisma.newsPost.count.mockResolvedValue(5);
 
-      try {
-        await service.removeCategory('tin-kien-truc');
-        throw new Error('lẽ ra phải ném lỗi');
-      } catch (error) {
-        const body = (error as ConflictException).getResponse() as {
-          error: string;
-          totalCount: number;
-          message: string;
-        };
-        expect(body.error).toBe(CATEGORY_IN_USE_CODE);
-        expect(body.totalCount).toBe(5);
-        expect(body.message).toContain('5');
-      }
+      await expect(service.removeCategory('tin-kien-truc')).resolves.toEqual({
+        hidden: true,
+      });
+      expect(prisma.newsCategory.update).toHaveBeenCalledWith({
+        where: { id: 'c3' },
+        data: { isActive: false },
+      });
+      expect(prisma.newsCategory.delete).not.toHaveBeenCalled();
     });
 
-    it('đếm MỌI trạng thái, không riêng bài đã đăng', async () => {
+    it('không cần đếm bài trước khi ẩn chuyên mục', async () => {
       prisma.newsCategory.findUnique.mockResolvedValue(categories[2]);
       prisma.newsPost.count.mockResolvedValue(5);
 
-      await expect(service.removeCategory('tin-kien-truc')).rejects.toThrow();
-      const [args] = prisma.newsPost.count.mock.calls[0] as [
-        { where: unknown },
-      ];
-      // Không có điều kiện `status` — bài nháp cũng là công sức biên tập.
-      expect(args.where).toEqual({ categoryId: 'c3' });
+      await service.removeCategory('tin-kien-truc');
+      expect(prisma.newsPost.count).not.toHaveBeenCalled();
     });
 
     it('chuyên mục không tồn tại: 404', async () => {

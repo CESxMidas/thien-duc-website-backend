@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDefined,
   IsEnum,
   IsObject,
@@ -66,4 +67,9 @@ export class CreateProjectItemDto {
   @IsOptional()
   @IsArray()
   gallerySections?: unknown[];
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -89,7 +89,7 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
 
     const expected = {
       ...publiclyVisible(NOW),
-      category: { slug: 'tin-du-an' },
+      category: { slug: 'tin-du-an', isActive: true },
     };
     expect(countArgs.where).toEqual(expected);
     expect(findArgs.where).toEqual(expected);

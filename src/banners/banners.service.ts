@@ -98,8 +98,11 @@ export class BannersService {
 
   async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.banner.delete({ where: { id } });
-    return { deleted: true };
+    await this.prisma.banner.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    return { hidden: true };
   }
 
   /**

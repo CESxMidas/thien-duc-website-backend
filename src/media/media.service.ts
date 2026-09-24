@@ -1,7 +1,5 @@
 import {
   Injectable,
-  InternalServerErrorException,
-  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -9,19 +7,21 @@ import type { MulterFile } from './types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateMediaAssetDto } from './dto/create-media-asset.dto';
+import { UpdateMediaAssetDto } from './dto/update-media-asset.dto';
 
 @Injectable()
 export class MediaService {
-  private readonly logger = new Logger(MediaService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
   ) {}
 
-  findAll(folder?: string) {
+  findAll(folder?: string, includeInactive = false) {
     return this.prisma.mediaAsset.findMany({
-      where: folder ? { folder: { startsWith: folder } } : undefined,
+      where: {
+        ...(includeInactive ? {} : { isActive: true }),
+        ...(folder ? { folder: { startsWith: folder } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -35,6 +35,11 @@ export class MediaService {
   /** Ghi nhận metadata của ảnh đã có sẵn URL (không đi qua Cloudinary). */
   create(dto: CreateMediaAssetDto, uploadedById?: string) {
     return this.prisma.mediaAsset.create({ data: { ...dto, uploadedById } });
+  }
+
+  async update(id: string, dto: UpdateMediaAssetDto) {
+    await this.findOne(id);
+    return this.prisma.mediaAsset.update({ where: { id }, data: dto });
   }
 
   async upload(
@@ -68,25 +73,11 @@ export class MediaService {
   }
 
   async remove(id: string) {
-    const asset = await this.findOne(id);
-
-    if (asset.publicId && this.cloudinary.isConfigured) {
-      try {
-        await this.cloudinary.destroyImage(asset.publicId);
-      } catch (error) {
-        // Không xóa bản ghi DB khi ảnh vẫn còn trên cloud, tránh asset mồ côi
-        // chiếm quota mà admin không còn thấy để dọn.
-        this.logger.error(
-          `Không xóa được ảnh ${asset.publicId} trên Cloudinary`,
-          error instanceof Error ? error.stack : undefined,
-        );
-        throw new InternalServerErrorException(
-          'Không xóa được ảnh trên Cloudinary, vui lòng thử lại',
-        );
-      }
-    }
-
-    await this.prisma.mediaAsset.delete({ where: { id } });
-    return { deleted: true };
+    await this.findOne(id);
+    await this.prisma.mediaAsset.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    return { hidden: true };
   }
 }

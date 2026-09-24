@@ -212,6 +212,7 @@ model ProjectItem {
   quickFacts      Json?          @map("quick_facts")
   gallerySections Json?          @map("gallery_sections")
   order           Int            @default(0)
+  isActive        Boolean        @default(true) @map("is_active")
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
@@ -230,6 +231,7 @@ model ProjectGalleryImage {
   url           String
   caption       Json?
   order         Int          @default(0)
+  isActive      Boolean      @default(true) @map("is_active")
   createdAt     DateTime     @default(now()) @map("created_at")
 
   @@index([projectId])
@@ -237,10 +239,11 @@ model ProjectGalleryImage {
 }
 
 model NewsCategory {
-  id    String @id @default(uuid())
-  slug  String @unique
-  name  Json
-  order Int    @default(0)
+  id       String  @id @default(uuid())
+  slug     String  @unique
+  name     Json
+  order    Int     @default(0)
+  isActive Boolean @default(true) @map("is_active")
 
   posts NewsPost[]
 
@@ -276,21 +279,21 @@ model NewsPost {
 }
 
 model Page {
-  id      String        @id @default(uuid())
-  slug    String        @unique
-  title   Json
-  content Json
+  id          String        @id @default(uuid())
+  slug        String        @unique
+  title       Json
+  content     Json
   // Bậc thang duyệt. CHÚ Ý: model này gọi cột là `status` (giống `NewsPost`),
   // khác `Project`/`CooperationProject` vốn dùng `contentStatus`.
-  status  ContentStatus @default(DRAFT)
+  status      ContentStatus @default(DRAFT)
   // Mốc công khai LẦN ĐẦU và lịch hẹn đăng (Batch 11) — cùng ngữ nghĩa với
   // `news_posts`, `projects`, `cooperation_projects`. `publishedAt` KHÔNG bị ghi
   // đè bởi lần đăng lại hay bởi giờ cron chạy. Bất biến của lệnh đặt lịch:
   // `scheduledAt != null ⇒ publishedAt = scheduledAt`.
-  publishedAt DateTime? @map("published_at")
-  scheduledAt DateTime? @map("scheduled_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  publishedAt DateTime?     @map("published_at")
+  scheduledAt DateTime?     @map("scheduled_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
   @@map("pages")
 }
@@ -387,6 +390,7 @@ model MediaAsset {
   folder       String?
   uploadedById String?  @map("uploaded_by_id")
   uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("media_assets")

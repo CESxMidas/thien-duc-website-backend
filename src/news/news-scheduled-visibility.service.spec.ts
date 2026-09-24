@@ -131,7 +131,10 @@ describe('NewsService — hiển thị công khai của bài lên lịch', () =>
       const [listArgs] = prisma.newsPost.findMany.mock.calls[0] as [
         { where: { OR?: unknown; category?: unknown } },
       ];
-      expect(listArgs.where.category).toEqual({ slug: 'tin-du-an' });
+      expect(listArgs.where.category).toEqual({
+        slug: 'tin-du-an',
+        isActive: true,
+      });
       expect(listArgs.where.OR).toBeDefined();
     });
 

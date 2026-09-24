@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   ParseFilePipeBuilder,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -27,6 +28,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateMediaAssetDto } from './dto/create-media-asset.dto';
+import { UpdateMediaAssetDto } from './dto/update-media-asset.dto';
 import { MediaService } from './media.service';
 
 /**
@@ -46,8 +48,12 @@ export class MediaController {
 
   @Get()
   @ApiQuery({ name: 'folder', required: false })
-  findAll(@Query('folder') folder?: string) {
-    return this.mediaService.findAll(folder);
+  @ApiQuery({ name: 'includeInactive', required: false })
+  findAll(
+    @Query('folder') folder?: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.mediaService.findAll(folder, includeInactive === 'true');
   }
 
   @Get(':id')
@@ -94,6 +100,11 @@ export class MediaController {
     @CurrentUser() user: { id: string },
   ) {
     return this.mediaService.create(dto, user.id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateMediaAssetDto) {
+    return this.mediaService.update(id, dto);
   }
 
   // Xóa ảnh là thao tác phá hủy: gỡ khỏi Cloudinary và có thể làm hỏng trang/dự

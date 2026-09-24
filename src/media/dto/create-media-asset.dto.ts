@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { IsSafeImageRef } from '../../common/validators/safe-url';
 
 export class CreateMediaAssetDto {
@@ -43,4 +49,9 @@ export class CreateMediaAssetDto {
   @IsString()
   @MaxLength(200)
   folder?: string;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

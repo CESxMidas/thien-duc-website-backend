@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDefined,
   IsInt,
   IsOptional,
@@ -59,4 +60,9 @@ export class CreateNewsCategoryDto {
   @IsInt()
   @Min(0)
   order?: number;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -310,9 +310,15 @@ export class CooperationService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-    await this.prisma.cooperationProject.delete({ where: { id } });
-    return { deleted: true };
+    const project = await this.findOne(id);
+    await this.prisma.cooperationProject.update({
+      where: { id: project.id },
+      data: {
+        contentStatus: ContentStatus.DRAFT,
+        scheduledAt: null,
+      },
+    });
+    return { hidden: true };
   }
 
   /**

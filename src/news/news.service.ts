@@ -22,7 +22,6 @@ import {
   publishedAtFor,
   type ScheduleState,
 } from '../common/publication-schedule';
-import { CATEGORY_IN_USE_CODE } from './news-category-slug';
 import { CreateNewsCategoryDto } from './dto/create-news-category.dto';
 import { CreateNewsPostDto } from './dto/create-news-post.dto';
 import { UpdateNewsCategoryDto } from './dto/update-news-category.dto';
@@ -107,7 +106,9 @@ export class NewsService {
     const now = new Date();
     const where: Prisma.NewsPostWhereInput = {
       ...publiclyVisibleWhere(now),
-      ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+      ...(categorySlug
+        ? { category: { slug: categorySlug, isActive: true } }
+        : {}),
     };
 
     const [totalItems, items] = await this.prisma.$transaction([
@@ -401,8 +402,14 @@ export class NewsService {
 
   async remove(slug: string) {
     const post = await this.findBySlug(slug);
-    await this.prisma.newsPost.delete({ where: { id: post.id } });
-    return { deleted: true };
+    await this.prisma.newsPost.update({
+      where: { id: post.id },
+      data: {
+        status: ContentStatus.DRAFT,
+        scheduledAt: null,
+      },
+    });
+    return { hidden: true };
   }
 
   // ----- Chuyên mục -----
@@ -479,6 +486,7 @@ export class NewsService {
   async findAllCategories(includeTotal = false) {
     const [categories, counts] = await Promise.all([
       this.prisma.newsCategory.findMany({
+        where: includeTotal ? undefined : { isActive: true },
         orderBy: [{ order: 'asc' }, { slug: 'asc' }],
       }),
       this.countPostsByCategory(new Date()),
@@ -549,20 +557,11 @@ export class NewsService {
    */
   async removeCategory(slug: string) {
     const category = await this.findCategoryBySlug(slug);
-    const totalCount = await this.prisma.newsPost.count({
-      where: { categoryId: category.id },
+    await this.prisma.newsCategory.update({
+      where: { id: category.id },
+      data: { isActive: false },
     });
-
-    if (totalCount > 0) {
-      throw new ConflictException({
-        error: CATEGORY_IN_USE_CODE,
-        message: `Chuyên mục đang được ${totalCount} bài viết sử dụng. Hãy chuyển hoặc gỡ các bài đó trước khi xóa chuyên mục.`,
-        totalCount,
-      });
-    }
-
-    await this.prisma.newsCategory.delete({ where: { id: category.id } });
-    return { deleted: true };
+    return { hidden: true };
   }
 
   private rethrowSlugConflict(error: unknown, message: string): never {

@@ -309,8 +309,14 @@ export class PagesService {
 
   async remove(slug: string) {
     const page = await this.findBySlug(slug);
-    await this.prisma.page.delete({ where: { id: page.id } });
-    return { deleted: true };
+    await this.prisma.page.update({
+      where: { id: page.id },
+      data: {
+        status: ContentStatus.DRAFT,
+        scheduledAt: null,
+      },
+    });
+    return { hidden: true };
   }
 
   private rethrowSlugConflict(error: unknown): never {

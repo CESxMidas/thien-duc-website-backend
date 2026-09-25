@@ -26,19 +26,19 @@ export class CreateBannerDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
-  eyebrow?: TranslatedTextDto;
+  eyebrow?: TranslatedTextDto | null;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
-  title?: TranslatedTextDto;
+  title?: TranslatedTextDto | null;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
-  subtitle?: TranslatedTextDto;
+  subtitle?: TranslatedTextDto | null;
 
   @ApiProperty({ maxLength: 500 })
   @IsString()
@@ -50,7 +50,7 @@ export class CreateBannerDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
-  ctaLabel?: TranslatedTextDto;
+  ctaLabel?: TranslatedTextDto | null;
 
   // Giá trị CSS object-position, vd "center 30%" — rất ngắn.
   @ApiProperty({ required: false, maxLength: 60 })

@@ -89,7 +89,7 @@ describe('BannersService — cửa sổ hiển thị', () => {
         image: baseDto.image,
         href: baseDto.href,
       });
-      expect(writtenData(prisma.banner.create).title).toBe(Prisma.JsonNull);
+      expect(writtenData(prisma.banner.create).title).toBeUndefined();
     });
 
     it('không gửi cửa sổ: ghi xuống hai NULL (banner luôn hiển thị)', async () => {
@@ -185,6 +185,21 @@ describe('BannersService — cửa sổ hiển thị', () => {
       const data = writtenData(prisma.banner.update);
       expect(data.displayFrom).toEqual(STORED.displayFrom);
       expect(data.displayUntil).toEqual(STORED.displayUntil);
+    });
+
+    it('xoá chữ overlay bằng null: ghi DB null thay vì giữ nội dung cũ', async () => {
+      await service.update('b1', {
+        title: null,
+        eyebrow: null,
+        subtitle: null,
+        ctaLabel: null,
+      });
+      expect(writtenData(prisma.banner.update)).toMatchObject({
+        title: Prisma.DbNull,
+        eyebrow: Prisma.DbNull,
+        subtitle: Prisma.DbNull,
+        ctaLabel: Prisma.DbNull,
+      });
     });
 
     it('xoá displayFrom bằng null: banner có hiệu lực ngay, biên trên còn nguyên', async () => {

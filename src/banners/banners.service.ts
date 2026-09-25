@@ -15,6 +15,12 @@ import {
 import { CreateBannerDto } from './dto/create-banner.dto';
 import { UpdateBannerDto } from './dto/update-banner.dto';
 
+function nullableJson(value: object | null | undefined) {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.DbNull;
+  return json(value);
+}
+
 @Injectable()
 export class BannersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -62,10 +68,10 @@ export class BannersService {
     return this.prisma.banner.create({
       data: {
         ...dto,
-        title: dto.title ? json(dto.title) : Prisma.JsonNull,
-        eyebrow: json(dto.eyebrow),
-        subtitle: json(dto.subtitle),
-        ctaLabel: json(dto.ctaLabel),
+        title: nullableJson(dto.title),
+        eyebrow: nullableJson(dto.eyebrow),
+        subtitle: nullableJson(dto.subtitle),
+        ctaLabel: nullableJson(dto.ctaLabel),
         ...window,
       } satisfies Prisma.BannerCreateInput,
     });
@@ -84,10 +90,10 @@ export class BannersService {
       where: { id },
       data: {
         ...dto,
-        title: json(dto.title),
-        eyebrow: json(dto.eyebrow),
-        subtitle: json(dto.subtitle),
-        ctaLabel: json(dto.ctaLabel),
+        title: nullableJson(dto.title),
+        eyebrow: nullableJson(dto.eyebrow),
+        subtitle: nullableJson(dto.subtitle),
+        ctaLabel: nullableJson(dto.ctaLabel),
         // Ghi đè phần trải từ `dto` (vốn là chuỗi ISO) bằng `Date` đã trộn.
         // Trộn xong mà ghi lại nguyên vẹn cũng an toàn: giá trị bằng đúng cái
         // đang lưu thì câu UPDATE không đổi gì.

@@ -62,7 +62,7 @@ export class BannersService {
     return this.prisma.banner.create({
       data: {
         ...dto,
-        title: json(dto.title),
+        title: dto.title ? json(dto.title) : Prisma.JsonNull,
         eyebrow: json(dto.eyebrow),
         subtitle: json(dto.subtitle),
         ctaLabel: json(dto.ctaLabel),

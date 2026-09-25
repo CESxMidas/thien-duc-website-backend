@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { BannersService } from './banners.service';
-import type { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import type { CreateBannerDto } from './dto/create-banner.dto';
 
 /**
@@ -89,7 +89,7 @@ describe('BannersService — cửa sổ hiển thị', () => {
         image: baseDto.image,
         href: baseDto.href,
       });
-      expect(writtenData(prisma.banner.create).title).toBeUndefined();
+      expect(writtenData(prisma.banner.create).title).toBe(Prisma.JsonNull);
     });
 
     it('không gửi cửa sổ: ghi xuống hai NULL (banner luôn hiển thị)', async () => {

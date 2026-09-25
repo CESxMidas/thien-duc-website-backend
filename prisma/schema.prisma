@@ -302,7 +302,7 @@ model Banner {
   id             String    @id @default(uuid())
   image          String
   eyebrow        Json?
-  title          Json
+  title          Json?
   subtitle       Json?
   href           String
   ctaLabel       Json?     @map("cta_label")

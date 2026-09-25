@@ -1,6 +1,5 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { CreateBannerDto } from '../../banners/dto/create-banner.dto';
 import { CreateCooperationProjectDto } from '../../cooperation/dto/create-cooperation-project.dto';
 import { CreateNewsCategoryDto } from '../../news/dto/create-news-category.dto';
 import { CreateNewsPostDto } from '../../news/dto/create-news-post.dto';
@@ -17,12 +16,13 @@ import { UpdateProjectDto } from '../../projects/dto/update-project.dto';
  * `@ValidateNested()` một mình KHÔNG chặn `undefined`: class-validator bỏ qua
  * giá trị undefined nên DTO lọt qua ValidationPipe, rồi Prisma mới ném
  * `PrismaClientValidationError: Argument \`title\` is missing` → client nhận
- * **500** cho một payload sai. Đo được trước bản sửa trên cả 4 module:
- * `POST /news`, `/projects`, `/pages`, `/banners`.
+ * **500** cho một payload sai. Đo được trước bản sửa trên các module nội dung
+ * bắt buộc có chữ như `POST /news`, `/projects`, `/pages`.
  *
  * `@IsDefined()` đưa nó về **400** ở đúng tầng validate. Test này khoá hợp đồng
- * đó, và khẳng định DTO `Update*` (PartialType) KHÔNG bị siết theo — PATCH từng
- * phần vẫn phải gửi được payload thiếu field.
+ * đó. Riêng banner đã đổi nghiệp vụ: có thể chỉ dùng ảnh, không overlay chữ.
+ * DTO `Update*` (PartialType) KHÔNG bị siết theo — PATCH từng phần vẫn phải gửi
+ * được payload thiếu field.
  */
 
 /** Có lỗi validate ở đúng property này không. */
@@ -80,12 +80,6 @@ describe('field song ngữ bắt buộc — thiếu thì bị chặn ở tầng 
       'CreatePageDto.title',
       CreatePageDto,
       { slug: 'a', content: [{ vi: 'c' }] },
-      'title',
-    ],
-    [
-      'CreateBannerDto.title',
-      CreateBannerDto,
-      { image: '/a.png', href: '/du-an' },
       'title',
     ],
     [

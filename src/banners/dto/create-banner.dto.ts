@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsDefined,
   IsInt,
   IsOptional,
   IsString,
@@ -29,11 +28,11 @@ export class CreateBannerDto {
   @Type(() => TranslatedTextDto)
   eyebrow?: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
-  @IsDefined()
+  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
-  title!: TranslatedTextDto;
+  title?: TranslatedTextDto;
 
   @ApiProperty({ required: false, type: TranslatedTextDto })
   @IsOptional()

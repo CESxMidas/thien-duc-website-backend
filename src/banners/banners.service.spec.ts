@@ -83,6 +83,15 @@ describe('BannersService — cửa sổ hiển thị', () => {
     (prisma.banner.findMany.mock.calls[0] as [Prisma.BannerFindManyArgs])[0];
 
   describe('CREATE', () => {
+    it('cho phép banner chỉ có ảnh, không có chữ overlay', async () => {
+      await service.create({ image: baseDto.image, href: baseDto.href });
+      expect(writtenData(prisma.banner.create)).toMatchObject({
+        image: baseDto.image,
+        href: baseDto.href,
+      });
+      expect(writtenData(prisma.banner.create).title).toBeUndefined();
+    });
+
     it('không gửi cửa sổ: ghi xuống hai NULL (banner luôn hiển thị)', async () => {
       await service.create({ ...baseDto });
       expect(writtenData(prisma.banner.create)).toMatchObject({

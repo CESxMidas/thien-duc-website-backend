@@ -260,6 +260,7 @@ model NewsPost {
   content     Json?
   author      String?
   image       String?
+  gallery     String[]      @default([])
   eventDate   DateTime?     @map("event_date")
   publishedAt DateTime?     @map("published_at")
   scheduledAt DateTime?     @map("scheduled_at")

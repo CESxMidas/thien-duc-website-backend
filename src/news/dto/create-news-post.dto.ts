@@ -71,6 +71,15 @@ export class CreateNewsPostDto {
   @IsSafeImageRef()
   image?: string;
 
+  @ApiProperty({ type: [String], required: false, maxItems: 50 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
+  @IsSafeImageRef({ each: true })
+  gallery?: string[];
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsDateString()

@@ -30,6 +30,8 @@ type NewsPostBody = {
   status: string;
   publishedAt: string | null;
   title: { vi: string; en?: string };
+  image: string | null;
+  gallery: string[];
 };
 
 type MeBody = { id: string; email: string; name: string; role: string };
@@ -148,6 +150,8 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
   });
 
   it('tạo bài nháp — mặc định DRAFT, chưa có publishedAt', async () => {
+    const cover = '/images/news/e2e-cover.webp';
+    const gallery = [cover, '/images/news/e2e-gallery.webp'];
     const res = await request(http)
       .post('/api/news')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -156,6 +160,8 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
         title: { vi: 'Bài smoke e2e', en: 'E2E smoke post' },
         summary: { vi: 'Bài tự sinh bởi e2e — sẽ bị xóa sau khi chạy.' },
         content: [{ vi: 'Đoạn nội dung kiểm thử.' }],
+        image: cover,
+        gallery,
       })
       .expect(201);
 
@@ -163,6 +169,8 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
     expect(data.slug).toBe(SLUG);
     expect(data.status).toBe('DRAFT');
     expect(data.publishedAt).toBeNull();
+    expect(data.image).toBe(cover);
+    expect(data.gallery).toEqual(gallery);
   });
 
   it('bài nháp KHÔNG lộ ra route public (list lẫn chi tiết)', async () => {

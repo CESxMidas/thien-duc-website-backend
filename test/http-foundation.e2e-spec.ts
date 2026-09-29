@@ -11,7 +11,7 @@
  *
  * Hai case là hồi quy của defect tìm ra trong đợt audit này:
  *   D1 — vượt trần body trả 500 thay vì 413.
- *   D2 — thiếu field song ngữ bắt buộc trả 500 (Prisma) thay vì 400.
+ *   D2 — thiếu field bắt buộc trả 500 (Prisma) thay vì 400.
  */
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -243,7 +243,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
   });
 
   // Hồi quy D2 — trước bản sửa đây là 500 (PrismaClientValidationError).
-  describe('D2 — thiếu field song ngữ bắt buộc → 400, KHÔNG phải 500', () => {
+  describe('D2 — thiếu field bắt buộc → 400, KHÔNG phải 500', () => {
     const missing: Array<[string, string, Record<string, unknown>]> = [
       [
         'news thiếu title',
@@ -266,9 +266,11 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         { slug: `${SLUG}-m4`, content: [{ vi: 'c' }] },
       ],
       [
-        'banners thiếu title',
+        // Copy của banner (eyebrow/title/subtitle/ctaLabel) là tùy chọn có chủ
+        // đích. Kiểm tra field ảnh bắt buộc để test không khóa ngược hợp đồng.
+        'banners thiếu image',
         '/api/banners',
-        { image: '/audit-probe.png', href: '/du-an' },
+        { href: '/du-an' },
       ],
     ];
 

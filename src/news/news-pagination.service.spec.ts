@@ -20,6 +20,34 @@ function publiclyVisible(now: Date) {
   };
 }
 
+function row(
+  id: string,
+  {
+    eventDate = null,
+    publishedAt = null,
+    createdAt = '2026-01-01T00:00:00.000Z',
+  }: {
+    eventDate?: string | null;
+    publishedAt?: string | null;
+    createdAt?: string;
+  } = {},
+) {
+  return {
+    id,
+    eventDate: eventDate ? new Date(eventDate) : null,
+    publishedAt: publishedAt ? new Date(publishedAt) : null,
+    createdAt: new Date(createdAt),
+  };
+}
+
+function rows(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    row(`row-${String(index + 1).padStart(2, '0')}`, {
+      publishedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+    }),
+  );
+}
+
 /**
  * THIEN-DUC-NEWS-SLIDER-AND-PAGINATION-M1 — hợp đồng phân trang của
  * `GET /news?page&limit`.
@@ -41,7 +69,7 @@ describe('NewsService.findAllPaginated', () => {
       { where: unknown },
     ];
     const [findArgs] = prisma.newsPost.findMany.mock.calls[0] as [
-      { where: unknown; orderBy: unknown; skip: number; take: number },
+      { where: unknown; orderBy: unknown; skip?: number; take?: number },
     ];
     return { countArgs, findArgs };
   }
@@ -68,7 +96,7 @@ describe('NewsService.findAllPaginated', () => {
     jest.useRealTimers();
   });
 
-  it('chỉ lấy bài PUBLISHED, mới nhất trước, có khoá phụ id desc', async () => {
+  it('chỉ lấy bài công khai, rồi service xếp theo ngày hiệu lực mới nhất trước', async () => {
     prisma.newsPost.count.mockResolvedValue(0);
     prisma.newsPost.findMany.mockResolvedValue([]);
 
@@ -89,20 +117,63 @@ describe('NewsService.findAllPaginated', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('skip/take suy ra từ page và limit', async () => {
+  it('cắt trang sau khi sort theo ngày hiệu lực để pagination không lặp/lệch bài', async () => {
     prisma.newsPost.count.mockResolvedValue(30);
-    prisma.newsPost.findMany.mockResolvedValue([]);
+    prisma.newsPost.findMany.mockResolvedValue(rows(30));
 
-    await service.findAllPaginated(3, 9);
+    const result = await service.findAllPaginated(3, 9);
     const { findArgs } = queries();
 
-    expect(findArgs.skip).toBe(18);
-    expect(findArgs.take).toBe(9);
+    expect(findArgs.skip).toBeUndefined();
+    expect(findArgs.take).toBeUndefined();
+    expect(result.items.map((item) => item.id)).toEqual([
+      'row-12',
+      'row-11',
+      'row-10',
+      'row-09',
+      'row-08',
+      'row-07',
+      'row-06',
+      'row-05',
+      'row-04',
+    ]);
+  });
+
+  it('sắp xếp DESC theo eventDate, fallback publishedAt, fallback createdAt', async () => {
+    prisma.newsPost.count.mockResolvedValue(4);
+    prisma.newsPost.findMany.mockResolvedValue([
+      row('created-fallback', {
+        createdAt: '2026-08-10T00:00:00.000Z',
+      }),
+      row('published-fallback', {
+        publishedAt: '2026-08-18T00:00:00.000Z',
+        createdAt: '2026-10-01T00:00:00.000Z',
+      }),
+      row('event-wins', {
+        eventDate: '2026-08-20T00:00:00.000Z',
+        publishedAt: '2026-01-01T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+      row('older-event', {
+        eventDate: '2026-08-15T00:00:00.000Z',
+        publishedAt: '2026-09-01T00:00:00.000Z',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      }),
+    ]);
+
+    const result = await service.findAllPaginated(1, 9);
+
+    expect(result.items.map((item) => item.id)).toEqual([
+      'event-wins',
+      'published-fallback',
+      'older-event',
+      'created-fallback',
+    ]);
   });
 
   it('trang 1: totalPages làm tròn lên, hasNextPage true, hasPreviousPage false', async () => {
     prisma.newsPost.count.mockResolvedValue(20);
-    prisma.newsPost.findMany.mockResolvedValue(Array(9).fill({ id: 'x' }));
+    prisma.newsPost.findMany.mockResolvedValue(rows(20));
 
     const result = await service.findAllPaginated(1, 9);
 
@@ -116,7 +187,7 @@ describe('NewsService.findAllPaginated', () => {
 
   it('trang cuối: số bài ít hơn limit, hasNextPage false', async () => {
     prisma.newsPost.count.mockResolvedValue(20);
-    prisma.newsPost.findMany.mockResolvedValue(Array(2).fill({ id: 'x' }));
+    prisma.newsPost.findMany.mockResolvedValue(rows(20));
 
     const result = await service.findAllPaginated(3, 9);
 
@@ -153,7 +224,7 @@ describe('NewsService.findAllPaginated', () => {
 
   it('tổng chia hết cho limit: không sinh thừa một trang rỗng', async () => {
     prisma.newsPost.count.mockResolvedValue(18);
-    prisma.newsPost.findMany.mockResolvedValue(Array(9).fill({ id: 'x' }));
+    prisma.newsPost.findMany.mockResolvedValue(rows(18));
 
     const result = await service.findAllPaginated(2, 9);
 
@@ -179,14 +250,25 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
     jest.useRealTimers();
   });
 
-  it('route công khai: chỉ PUBLISHED, publishedAt desc + id desc', async () => {
-    await service.findAll(true);
+  it('route công khai: chỉ bài công khai và sort theo ngày hiệu lực', async () => {
+    prisma.newsPost.findMany.mockResolvedValue([
+      row('published-fallback', { publishedAt: '2026-08-18T00:00:00.000Z' }),
+      row('event-wins', { eventDate: '2026-08-20T00:00:00.000Z' }),
+      row('created-fallback', { createdAt: '2026-08-10T00:00:00.000Z' }),
+    ]);
+
+    const result = await service.findAll(true);
     const [args] = prisma.newsPost.findMany.mock.calls[0] as [
       { where: unknown; orderBy: unknown },
     ];
 
     expect(args.where).toEqual(publiclyVisible(NOW));
     expect(args.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
+    expect(result.map((item) => item.id)).toEqual([
+      'event-wins',
+      'published-fallback',
+      'created-fallback',
+    ]);
   });
 
   it('route admin: không lọc trạng thái, updatedAt desc + id desc', async () => {

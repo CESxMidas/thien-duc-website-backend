@@ -56,6 +56,13 @@ type NewsPublicationState = {
   publishedAt: Date | null;
 };
 
+type NewsListOrderable = {
+  id: string;
+  eventDate: Date | null;
+  publishedAt: Date | null;
+  createdAt: Date;
+};
+
 /** Đưa bài viết về hình dạng chung mà các vị từ lịch nhận vào. */
 function toScheduleState(post: NewsPublicationState): ScheduleState {
   return {
@@ -69,6 +76,20 @@ function toScheduleState(post: NewsPublicationState): ScheduleState {
 const EDIT_DENIED_MESSAGE =
   'Bài viết đã được lên lịch hoặc đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.';
 
+function effectiveNewsDate(post: NewsListOrderable) {
+  return post.eventDate ?? post.publishedAt ?? post.createdAt;
+}
+
+function compareNewsForPublicList(
+  first: NewsListOrderable,
+  second: NewsListOrderable,
+) {
+  const byDate =
+    effectiveNewsDate(second).getTime() - effectiveNewsDate(first).getTime();
+  if (byDate !== 0) return byDate;
+  return second.id.localeCompare(first.id);
+}
+
 @Injectable()
 export class NewsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -81,11 +102,15 @@ export class NewsService {
    * cả khi reconciler chưa kịp đổi `status`. Admin (false) vẫn thấy mọi bài.
    */
   findAll(publishedOnly = false) {
-    return this.prisma.newsPost.findMany({
+    const posts = this.prisma.newsPost.findMany({
       where: publishedOnly ? publiclyVisibleWhere(new Date()) : undefined,
       orderBy: this.listOrderBy(publishedOnly),
       include: { category: true },
     });
+
+    return publishedOnly
+      ? posts.then((items) => [...items].sort(compareNewsForPublicList))
+      : posts;
   }
 
   /**
@@ -111,18 +136,19 @@ export class NewsService {
         : {}),
     };
 
-    const [totalItems, items] = await this.prisma.$transaction([
+    const [totalItems, allItems] = await this.prisma.$transaction([
       this.prisma.newsPost.count({ where }),
       this.prisma.newsPost.findMany({
         where,
         orderBy: this.listOrderBy(true),
         include: { category: true },
-        skip: (page - 1) * limit,
-        take: limit,
       }),
     ]);
 
     const totalPages = Math.ceil(totalItems / limit);
+    const items = [...allItems]
+      .sort(compareNewsForPublicList)
+      .slice((page - 1) * limit, page * limit);
 
     return {
       items,

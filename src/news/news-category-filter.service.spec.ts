@@ -106,7 +106,7 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     expect(countArgs.where).toEqual(findArgs.where);
   });
 
-  it('giữ nguyên thứ tự và phân trang khi lọc chuyên mục', async () => {
+  it('giữ nguyên thứ tự nền và để service cắt trang sau khi sort ngày hiệu lực', async () => {
     prisma.newsPost.count.mockResolvedValue(30);
     prisma.newsPost.findMany.mockResolvedValue([]);
 
@@ -114,8 +114,8 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     const { findArgs } = queries();
 
     expect(findArgs.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
-    expect(findArgs.skip).toBe(18);
-    expect(findArgs.take).toBe(9);
+    expect(findArgs.skip).toBeUndefined();
+    expect(findArgs.take).toBeUndefined();
   });
 
   it('chuyên mục có thật nhưng chưa bài nào đăng: trang rỗng, không lỗi', async () => {
@@ -142,7 +142,14 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
 
   it('metadata phân trang vẫn đúng trên tập đã lọc', async () => {
     prisma.newsPost.count.mockResolvedValue(20);
-    prisma.newsPost.findMany.mockResolvedValue(Array(9).fill({ id: 'x' }));
+    prisma.newsPost.findMany.mockResolvedValue(
+      Array.from({ length: 20 }, (_, index) => ({
+        id: `x-${index}`,
+        eventDate: null,
+        publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      })),
+    );
 
     const result = await service.findAllPaginated(2, 9, 'tin-du-an');
 

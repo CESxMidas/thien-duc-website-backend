@@ -224,7 +224,7 @@ export class NewsService {
    * Chỉ ảnh hưởng bài TẠO MỚI từ đây trở đi — không đụng tới bài đã có.
    */
   async create(dto: CreateNewsPostDto) {
-    const { eventDate, ...rest } = dto;
+    const { eventDate, referenceUrl, ...rest } = dto;
     try {
       return await this.prisma.newsPost.create({
         data: {
@@ -232,6 +232,7 @@ export class NewsService {
           title: json(rest.title),
           summary: json(rest.summary),
           content: json(rest.content),
+          referenceUrl: referenceUrl || null,
           eventDate: eventDate ? new Date(eventDate) : undefined,
           // Ba cột xuất bản do SERVER đặt, ghi SAU `...rest` nên payload không
           // chèn được vào. `forbidNonWhitelisted` đã chặn field lạ từ tầng
@@ -264,7 +265,7 @@ export class NewsService {
       editorMayEditScheduled(toScheduleState(post)),
       EDIT_DENIED_MESSAGE,
     );
-    const { eventDate, ...rest } = dto;
+    const { eventDate, referenceUrl, ...rest } = dto;
     try {
       return await this.prisma.newsPost.update({
         where: { id: post.id },
@@ -273,6 +274,8 @@ export class NewsService {
           title: json(rest.title),
           summary: json(rest.summary),
           content: json(rest.content),
+          referenceUrl:
+            referenceUrl === undefined ? undefined : referenceUrl || null,
           eventDate: eventDate ? new Date(eventDate) : undefined,
         } satisfies Prisma.NewsPostUncheckedUpdateInput,
       });

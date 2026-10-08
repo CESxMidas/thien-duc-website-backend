@@ -251,22 +251,23 @@ model NewsCategory {
 }
 
 model NewsPost {
-  id          String        @id @default(uuid())
-  slug        String        @unique
-  categoryId  String?       @map("category_id")
-  category    NewsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title       Json
-  summary     Json
-  content     Json?
-  author      String?
-  image       String?
-  gallery     String[]      @default([])
-  eventDate   DateTime?     @map("event_date")
-  publishedAt DateTime?     @map("published_at")
-  scheduledAt DateTime?     @map("scheduled_at")
-  status      ContentStatus @default(DRAFT)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id           String        @id @default(uuid())
+  slug         String        @unique
+  categoryId   String?       @map("category_id")
+  category     NewsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title        Json
+  summary      Json
+  content      Json?
+  author       String?
+  referenceUrl String?       @map("reference_url")
+  image        String?
+  gallery      String[]      @default([])
+  eventDate    DateTime?     @map("event_date")
+  publishedAt  DateTime?     @map("published_at")
+  scheduledAt  DateTime?     @map("scheduled_at")
+  status       ContentStatus @default(DRAFT)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
 
   // Danh sách tin công khai lọc theo chuyên mục:
   //   WHERE category_id = ? AND status = 'PUBLISHED'

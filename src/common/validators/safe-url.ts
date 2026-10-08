@@ -82,6 +82,22 @@ export function isSafeImageRef(value: unknown): boolean {
   }
 }
 
+/** Link tham khảo công khai: chỉ nhận URL tuyệt đối http/https hợp lệ. */
+export function isSafeReferenceUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const v = collapse(value);
+  if (!/^https?:\/\//i.test(v)) return false;
+  try {
+    const url = new URL(v);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** `href` phai la duong dan noi bo (site tu dieu huong, khong mo scheme la). */
 export function IsSafeInternalPath(options?: ValidationOptions) {
   return function (object: object, propertyName: string) {
@@ -111,6 +127,23 @@ export function IsSafeImageRef(options?: ValidationOptions) {
         validate: (value: unknown) => isSafeImageRef(value),
         defaultMessage: () =>
           `${propertyName} phai la duong dan noi bo bat dau bang "/" hoac URL https:// hop le`,
+      },
+    });
+  };
+}
+
+/** `referenceUrl` cho phép URL tuyệt đối http/https, chặn scheme lạ. */
+export function IsSafeReferenceUrl(options?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isSafeReferenceUrl',
+      target: object.constructor,
+      propertyName,
+      options,
+      validator: {
+        validate: (value: unknown) => isSafeReferenceUrl(value),
+        defaultMessage: () =>
+          `${propertyName} phai la URL http:// hoac https:// hop le`,
       },
     });
   };

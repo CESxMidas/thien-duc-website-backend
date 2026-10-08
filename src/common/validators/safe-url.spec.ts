@@ -3,7 +3,11 @@ import { validateSync } from 'class-validator';
 import { CreateBannerDto } from '../../banners/dto/create-banner.dto';
 import { CreateNewsPostDto } from '../../news/dto/create-news-post.dto';
 import { CreateProjectDto } from '../../projects/dto/create-project.dto';
-import { isSafeImageRef, isSafeInternalPath } from './safe-url';
+import {
+  isSafeImageRef,
+  isSafeInternalPath,
+  isSafeReferenceUrl,
+} from './safe-url';
 
 /**
  * AUDIT-M2 — hàng rào phía SERVER cho field chứa URL.
@@ -93,6 +97,28 @@ describe('isSafeImageRef — dùng cho image/url/gallery', () => {
   });
 });
 
+describe('isSafeReferenceUrl — dùng cho link tham khảo', () => {
+  it.each([
+    ['https://example.com/bai-viet'],
+    ['http://example.com/tin-cu'],
+    ['https://example.com/a?utm_source=test#section'],
+  ])('nhận URL tham khảo hợp lệ: %s', (value) => {
+    expect(isSafeReferenceUrl(value)).toBe(true);
+  });
+
+  it.each([
+    ['javascript:alert(1)'],
+    [`java${TAB}script:alert(1)`],
+    ['data:text/html,<h1>x</h1>'],
+    ['//evil.example.com'],
+    ['/tin-tuc/noi-bo'],
+    ['example.com/bai-viet'],
+    [''],
+  ])('từ chối URL tham khảo không hợp lệ: %j', (value) => {
+    expect(isSafeReferenceUrl(value)).toBe(false);
+  });
+});
+
 describe('DTO thật áp dụng hàng rào', () => {
   const bannerBase = { title: { vi: 't' } };
 
@@ -143,6 +169,21 @@ describe('DTO thật áp dụng hàng rào', () => {
     expect(errs('https://res.cloudinary.com/demo/a.jpg')).not.toContain(
       'image',
     );
+  });
+
+  it('news.referenceUrl chỉ nhận URL http/https', () => {
+    const errs = (referenceUrl: string) =>
+      validateSync(
+        plainToInstance(CreateNewsPostDto, {
+          slug: 'a',
+          title: { vi: 't' },
+          summary: { vi: 's' },
+          referenceUrl,
+        }),
+      ).map((e) => e.property);
+    expect(errs('https://example.com/bai-viet')).not.toContain('referenceUrl');
+    expect(errs('javascript:alert(1)')).toContain('referenceUrl');
+    expect(errs('/tin-tuc/noi-bo')).toContain('referenceUrl');
   });
 
   it('project.image + gallery[] nguy hiểm bị chặn', () => {

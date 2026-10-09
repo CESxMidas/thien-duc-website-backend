@@ -20,8 +20,8 @@ import { ProjectsService } from './projects.service';
  * lai là hai việc khác nhau, khác cả quyền (chốt `@Roles(ADMIN, SUPER_ADMIN)` ở
  * controller — bộ test này chạy thẳng vào service nên không đi qua guard).
  *
- * Luật v1: **chỉ hẹn giờ cho lần công khai ĐẦU TIÊN.** Mọi ca từ chối bên dưới
- * đều quy về đúng một câu hỏi: bản ghi này đã từng ra công khai chưa?
+ * Dự án đã trả về nháp vẫn được đặt lịch đăng lại. Các ca từ chối tập trung vào
+ * bản ghi đang công khai, lịch đã tới hạn, hoặc tổ hợp PENDING giữ lịch sử thật.
  */
 
 /** "Bây giờ" cố định cho mọi phép so ngưỡng. */
@@ -167,14 +167,16 @@ describe('ProjectsService — lệnh đặt / huỷ lịch đăng', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
-    /** E — từng công khai thật rồi gỡ về nháp. */
-    it('nháp TỪNG đăng → 409 (v1 không hẹn giờ đăng lại)', async () => {
+    /** E — từng công khai thật rồi gỡ về nháp: được hẹn giờ đăng lại. */
+    it('nháp TỪNG đăng → vẫn đặt lịch đăng lại được', async () => {
       given({ contentStatus: ContentStatus.DRAFT, publishedAt: PAST });
 
-      await expect(
-        service.schedulePublication('du-an', FUTURE_ISO),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(prisma.project.update).not.toHaveBeenCalled();
+      await service.schedulePublication('du-an', FUTURE_ISO);
+
+      const data = writtenData();
+      expect(data.contentStatus).toBe(ContentStatus.PENDING);
+      expect(data.scheduledAt).toEqual(FUTURE);
+      expect(data.publishedAt).toEqual(FUTURE);
     });
 
     /** F — lịch đã tới hạn: dự án đã hiển thị công khai rồi. */

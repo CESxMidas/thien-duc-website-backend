@@ -185,7 +185,7 @@ export class ProjectsController {
     description:
       'Đặt lịch tương đương uỷ quyền cho một lần đăng trong tương lai nên chốt quyền y như "Đăng ngay". ' +
       'Ghi nguyên tử `contentStatus = PENDING`, `scheduledAt` và `publishedAt` cùng bằng mốc đã hẹn. ' +
-      'Chỉ dành cho lần công khai ĐẦU TIÊN. `scheduledAt` bắt buộc kèm múi giờ tường minh (`Z` hoặc `±HH:MM`), ' +
+      'Dự án đã trả về nháp vẫn được đặt lịch đăng lại. `scheduledAt` bắt buộc kèm múi giờ tường minh (`Z` hoặc `±HH:MM`), ' +
       'cách hiện tại tối thiểu 1 phút và tối đa 2 năm.',
   })
   @ApiResponse({ status: 200, description: 'Đã đặt lịch.' })
@@ -198,7 +198,7 @@ export class ProjectsController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy dự án.' })
   @ApiResponse({
     status: 409,
-    description: 'Dự án đang đăng công khai, hoặc đã từng được đăng.',
+    description: 'Dự án đang đăng công khai, hoặc lịch đã tới hạn.',
   })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)

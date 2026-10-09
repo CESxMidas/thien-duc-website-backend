@@ -373,13 +373,13 @@ export class ProjectsService {
       );
     }
 
-    // Dự án TỪNG công khai thì không hẹn giờ lại được ở v1, kể cả khi đã gỡ về
-    // nháp. Ghi lịch mới sẽ ghi đè `publishedAt` — mà mốc đó luôn có nghĩa là
-    // **lần công khai ĐẦU TIÊN**. Ghi đè nó là âm thầm định nghĩa lại field
-    // thành "lần đăng gần nhất". Đăng lại theo lịch là một nghiệp vụ khác, kéo
-    // theo hàng loạt câu hỏi (thứ tự trang dự án, `lastModified` của sitemap,
-    // mốc nào dùng cho xếp hạng) mà schema hiện không trả lời được.
-    if (hasHistoricalPublication(project, now)) {
+    // Dự án đã được "Trả về nháp" vẫn có thể hẹn giờ đăng lại. Chỉ chặn các bản
+    // không phải DRAFT nhưng đã có lịch sử công khai thật: ví dụ lịch đã tới hạn
+    // đang hiển thị qua vị từ public, hoặc dữ liệu PENDING dị dạng giữ mốc cũ.
+    if (
+      project.contentStatus !== ContentStatus.DRAFT &&
+      hasHistoricalPublication(project, now)
+    ) {
       throw new ConflictException(
         'Dự án này đã từng được đăng nên không đặt lịch đăng lại được.',
       );

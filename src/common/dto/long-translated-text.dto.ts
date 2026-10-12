@@ -28,13 +28,20 @@ export const MAX_LONG_TEXT_LENGTH = 100_000;
  * khai báo độc lập.
  */
 export class LongTranslatedTextDto {
-  @ApiProperty({ maxLength: MAX_LONG_TEXT_LENGTH })
+  @ApiProperty({
+    maxLength: MAX_LONG_TEXT_LENGTH,
+    description: 'Đoạn nội dung dài bằng tiếng Việt, bắt buộc.',
+  })
   @IsString()
   @MaxLength(MAX_LONG_TEXT_LENGTH)
   @IsNotBlank()
   vi!: string;
 
-  @ApiProperty({ required: false, maxLength: MAX_LONG_TEXT_LENGTH })
+  @ApiProperty({
+    required: false,
+    maxLength: MAX_LONG_TEXT_LENGTH,
+    description: 'Đoạn nội dung dài bằng tiếng Anh, không bắt buộc.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(MAX_LONG_TEXT_LENGTH)

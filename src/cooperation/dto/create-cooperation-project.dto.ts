@@ -12,43 +12,66 @@ import { TranslatedTextDto } from '../../common/dto/translated-text.dto';
 import { IsSafeImageRef } from '../../common/validators/safe-url';
 
 export class CreateCooperationProjectDto {
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Tên dự án hợp tác hiển thị ở slider/trang hợp tác.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   name!: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Địa điểm dự án hợp tác.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   location!: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Vai trò của Thiên Đức trong dự án hợp tác.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   role!: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Tên đối tác phát triển hoặc đồng chủ đầu tư.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   partner!: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Quy mô dự án hợp tác hiển thị trên thẻ.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   scale!: TranslatedTextDto;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description:
+      'Tiến độ hiển thị bằng chữ, ví dụ Đã bàn giao; không phải trạng thái xuất bản.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   status!: TranslatedTextDto;
 
-  @ApiProperty({ required: false, maxLength: 500 })
+  @ApiProperty({
+    required: false,
+    maxLength: 500,
+    description: 'Ảnh chính của dự án hợp tác.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -77,7 +100,10 @@ export class CreateCooperationProjectDto {
    * đóng đường GHI qua API nội dung chung.
    */
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    description: 'Thứ tự hiển thị của dự án hợp tác, số nhỏ đứng trước.',
+  })
   @IsOptional()
   @IsInt()
   order?: number;

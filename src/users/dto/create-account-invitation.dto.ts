@@ -11,16 +11,25 @@ import { Role } from '../../../generated/prisma/client';
  * `failedLoginAttempts`, `lockedUntil`, token...) sẽ bị 400 ngay tại đây.
  */
 export class CreateAccountInvitationDto {
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Email người được mời thiết lập tài khoản CMS.',
+    example: 'editor@thienduc.vn',
+  })
   @IsEmail()
   email!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Họ tên hiển thị của người dùng CMS.',
+    example: 'Nguyễn Văn A',
+  })
   @IsString()
   @MinLength(2)
   name!: string;
 
-  @ApiProperty({ enum: Role })
+  @ApiProperty({
+    enum: Role,
+    description: 'Vai trò truy cập được cấp cho tài khoản CMS.',
+  })
   @IsEnum(Role)
   role!: Role;
 }

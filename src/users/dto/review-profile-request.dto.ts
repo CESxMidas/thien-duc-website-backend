@@ -3,7 +3,10 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /** Quyết định của ADMIN/SUPER_ADMIN với một yêu cầu cập nhật hồ sơ. */
 export class ReviewProfileRequestDto {
-  @ApiProperty({ enum: ['APPROVE', 'REJECT'] })
+  @ApiProperty({
+    enum: ['APPROVE', 'REJECT'],
+    description: 'Quyết định duyệt hoặc từ chối yêu cầu cập nhật hồ sơ.',
+  })
   @IsIn(['APPROVE', 'REJECT'])
   action!: 'APPROVE' | 'REJECT';
 

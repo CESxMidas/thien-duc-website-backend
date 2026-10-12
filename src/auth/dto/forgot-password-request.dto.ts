@@ -8,7 +8,11 @@ import { IsEmail, MaxLength } from 'class-validator';
  * DTO không được là kênh dò tài khoản.
  */
 export class ForgotPasswordRequestDto {
-  @ApiProperty({ maxLength: 254 })
+  @ApiProperty({
+    maxLength: 254,
+    description: 'Email tài khoản CMS cần nhận liên kết đặt lại mật khẩu.',
+    example: 'editor@thienduc.vn',
+  })
   @IsEmail()
   // 254 là độ dài tối đa hợp lệ của một địa chỉ email theo RFC 5321.
   @MaxLength(254)

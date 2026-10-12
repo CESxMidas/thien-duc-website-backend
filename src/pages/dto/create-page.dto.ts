@@ -15,13 +15,20 @@ import { IsNotBlank } from '../../common/validators/not-blank';
 import { MAX_CONTENT_BLOCKS } from '../../common/dto/content-blocks';
 
 export class CreatePageDto {
-  @ApiProperty({ maxLength: 160 })
+  @ApiProperty({
+    maxLength: 160,
+    description: 'Slug trang nội dung tĩnh, ví dụ gioi-thieu hoặc lien-he.',
+    example: 'gioi-thieu',
+  })
   @IsString()
   @MaxLength(160)
   @IsNotBlank()
   slug!: string;
 
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description: 'Tiêu đề trang nội dung hiển thị ở hero và SEO.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
@@ -38,7 +45,11 @@ export class CreatePageDto {
    * `TranslatedTextDto` (5000): đây là nội dung biên tập dài, xem lý do ở
    * `common/dto/long-translated-text.dto.ts`.
    */
-  @ApiProperty({ type: [LongTranslatedTextDto] })
+  @ApiProperty({
+    type: [LongTranslatedTextDto],
+    description:
+      'Nội dung trang, mỗi phần tử là một đoạn văn song ngữ; đoạn đầu được dùng làm mô tả dưới tiêu đề.',
+  })
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })

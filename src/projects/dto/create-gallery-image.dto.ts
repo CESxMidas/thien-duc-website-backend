@@ -24,7 +24,11 @@ export class CreateGalleryImageDto {
   @IsSafeImageRef()
   url!: string;
 
-  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @ApiProperty({
+    required: false,
+    type: TranslatedTextDto,
+    description: 'Chú thích ảnh hiển thị trong thư viện dự án.',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
@@ -50,7 +54,11 @@ export class CreateGalleryImageDto {
   @Min(0)
   order?: number;
 
-  @ApiProperty({ required: false, default: true })
+  @ApiProperty({
+    required: false,
+    default: true,
+    description: 'Bật/tắt ảnh trong thư viện dự án công khai.',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

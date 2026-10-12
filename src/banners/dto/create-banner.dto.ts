@@ -16,55 +16,89 @@ import {
 } from '../../common/validators/safe-url';
 
 export class CreateBannerDto {
-  @ApiProperty({ maxLength: 500 })
+  @ApiProperty({
+    maxLength: 500,
+    description: 'Ảnh nền của banner trang chủ.',
+  })
   @IsString()
   @MaxLength(500)
   @IsSafeImageRef()
   image!: string;
 
-  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @ApiProperty({
+    required: false,
+    type: TranslatedTextDto,
+    description: 'Nhãn nhỏ phía trên tiêu đề banner.',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   eyebrow?: TranslatedTextDto | null;
 
-  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @ApiProperty({
+    required: false,
+    type: TranslatedTextDto,
+    description: 'Tiêu đề chính trên banner.',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   title?: TranslatedTextDto | null;
 
-  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @ApiProperty({
+    required: false,
+    type: TranslatedTextDto,
+    description: 'Mô tả phụ dưới tiêu đề banner.',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   subtitle?: TranslatedTextDto | null;
 
-  @ApiProperty({ maxLength: 500 })
+  @ApiProperty({
+    maxLength: 500,
+    description: 'Đường dẫn nội bộ khi bấm nút CTA trên banner.',
+    example: '/du-an/khu-do-thi-hung-phu',
+  })
   @IsString()
   @MaxLength(500)
   @IsSafeInternalPath()
   href!: string;
 
-  @ApiProperty({ required: false, type: TranslatedTextDto })
+  @ApiProperty({
+    required: false,
+    type: TranslatedTextDto,
+    description: 'Nhãn nút CTA hiển thị trên banner.',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
   ctaLabel?: TranslatedTextDto | null;
 
   // Giá trị CSS object-position, vd "center 30%" — rất ngắn.
-  @ApiProperty({ required: false, maxLength: 60 })
+  @ApiProperty({
+    required: false,
+    maxLength: 60,
+    description:
+      'Giá trị CSS object-position để canh ảnh banner, ví dụ center 55%.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(60)
   objectPosition?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    description: 'Thứ tự hiển thị của banner, số nhỏ đứng trước.',
+  })
   @IsOptional()
   @IsInt()
   order?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    description: 'Bật/tắt banner trên website công khai.',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

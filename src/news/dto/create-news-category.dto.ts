@@ -43,7 +43,11 @@ export class CreateNewsCategoryDto {
   slug!: string;
 
   /** `vi` bắt buộc, `en` tuỳ chọn — xem `TranslatedTextDto`. */
-  @ApiProperty({ type: TranslatedTextDto })
+  @ApiProperty({
+    type: TranslatedTextDto,
+    description:
+      'Tên chuyên mục tin tức hiển thị trên bộ lọc và trang danh mục.',
+  })
   @IsDefined()
   @ValidateNested()
   @Type(() => TranslatedTextDto)
@@ -54,14 +58,23 @@ export class CreateNewsCategoryDto {
    * trùng vẫn ra thứ tự ổn định giữa các lần chạy. `@Min(0)` chặn số âm — âm
    * không sai về kỹ thuật nhưng luôn là dấu hiệu client tính nhầm.
    */
-  @ApiProperty({ required: false, default: 0, minimum: 0 })
+  @ApiProperty({
+    required: false,
+    default: 0,
+    minimum: 0,
+    description: 'Thứ tự hiển thị chuyên mục, số nhỏ đứng trước.',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   order?: number;
 
-  @ApiProperty({ required: false, default: true })
+  @ApiProperty({
+    required: false,
+    default: true,
+    description: 'Bật/tắt chuyên mục trên website công khai.',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

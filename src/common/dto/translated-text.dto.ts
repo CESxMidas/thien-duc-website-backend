@@ -8,13 +8,20 @@ import { IsNotBlank } from '../validators/not-blank';
 const MAX_TEXT_LENGTH = 5000;
 
 export class TranslatedTextDto {
-  @ApiProperty({ maxLength: MAX_TEXT_LENGTH })
+  @ApiProperty({
+    maxLength: MAX_TEXT_LENGTH,
+    description: 'Nội dung tiếng Việt, bắt buộc.',
+  })
   @IsString()
   @MaxLength(MAX_TEXT_LENGTH)
   @IsNotBlank()
   vi!: string;
 
-  @ApiProperty({ required: false, maxLength: MAX_TEXT_LENGTH })
+  @ApiProperty({
+    required: false,
+    maxLength: MAX_TEXT_LENGTH,
+    description: 'Nội dung tiếng Anh, không bắt buộc.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(MAX_TEXT_LENGTH)

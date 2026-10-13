@@ -103,6 +103,7 @@ export class MediaController {
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateMediaAssetDto) {
     return this.mediaService.update(id, dto);
   }

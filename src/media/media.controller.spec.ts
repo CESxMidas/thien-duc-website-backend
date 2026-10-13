@@ -28,6 +28,12 @@ describe('MediaController @Roles (R1: chặn EDITOR xóa ảnh)', () => {
     expect(roles).not.toContain(Role.EDITOR);
   });
 
+  it('PATCH /media/:id: chỉ ADMIN, SUPER_ADMIN (không có EDITOR)', () => {
+    const roles = requiredRoles('update');
+    expect(roles).toEqual([Role.ADMIN, Role.SUPER_ADMIN]);
+    expect(roles).not.toContain(Role.EDITOR);
+  });
+
   it('Upload/list/create: EDITOR trở lên vẫn dùng được (không đổi)', () => {
     for (const handler of ['upload', 'create', 'findAll', 'findOne'] as const) {
       const roles = requiredRoles(handler);

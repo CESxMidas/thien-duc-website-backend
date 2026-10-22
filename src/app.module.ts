@@ -18,6 +18,7 @@ import { ContactModule } from './contact/contact.module';
 import { MediaModule } from './media/media.module';
 import { SearchModule } from './search/search.module';
 import { SettingsModule } from './settings/settings.module';
+import { RecruitmentPositionsModule } from './recruitment-positions/recruitment-positions.module';
 import { TestSupportModule } from './test-support/test-support.module';
 
 /**
@@ -48,6 +49,7 @@ const testSupportModules =
     MediaModule,
     SearchModule,
     SettingsModule,
+    RecruitmentPositionsModule,
     ...testSupportModules,
   ],
   controllers: [AppController],

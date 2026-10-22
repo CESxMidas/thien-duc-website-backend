@@ -300,6 +300,27 @@ model Page {
   @@map("pages")
 }
 
+model RecruitmentPosition {
+  id               String        @id @default(uuid())
+  slug             String        @unique
+  title            Json
+  department       Json
+  location         Json
+  type             Json
+  summary          Json
+  responsibilities Json
+  requirements     Json
+  benefits         Json
+  deadline         DateTime?     @db.Date
+  status           ContentStatus @default(DRAFT)
+  order            Int           @default(0)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@index([status, deadline, order], map: "recruitment_positions_public_idx")
+  @@map("recruitment_positions")
+}
+
 model Banner {
   id             String    @id @default(uuid())
   image          String

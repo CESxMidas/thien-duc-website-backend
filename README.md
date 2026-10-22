@@ -29,6 +29,36 @@ PostgreSQL local: `localhost:5433`, database `thien_duc`. API:
 Không dùng giá trị production trong file local và không commit `.env*` (trừ
 `.env.example`).
 
+### Recruitment positions
+
+`/api/recruitment-positions` cung cấp danh sách vị trí đang tuyển cho website.
+GET công khai chỉ trả trạng thái `PUBLISHED` với `deadline` còn hiệu lực (hạn
+được tính hết ngày theo `Asia/Ho_Chi_Minh`). `deadline` là ngày thuần
+`YYYY-MM-DD` hoặc `null` trong request và response.
+
+Request `POST` và `PATCH` dùng `title`, `department`, `location`, `type`,
+`summary` theo dạng `{ "vi": "…", "en": "…" }` (trường `en` tùy chọn).
+`responsibilities`, `requirements`, `benefits` là object song ngữ với mảng
+chuỗi theo ngôn ngữ: `{ "vi": ["…"], "en": ["…"] }` (`en` tùy chọn). Mọi field
+văn bản song ngữ trong response giữ nguyên các shape này.
+
+Các route dành cho Admin CMS:
+
+| Method | Route | Quyền |
+| --- | --- | --- |
+| `GET` | `/api/recruitment-positions/admin` | EDITOR, ADMIN, SUPER_ADMIN |
+| `GET` | `/api/recruitment-positions/admin/:id` | EDITOR, ADMIN, SUPER_ADMIN |
+| `POST` | `/api/recruitment-positions` | EDITOR, ADMIN, SUPER_ADMIN |
+| `PATCH` | `/api/recruitment-positions/:id` | EDITOR, ADMIN, SUPER_ADMIN |
+| `DELETE` | `/api/recruitment-positions/:id` | ADMIN, SUPER_ADMIN |
+
+Status dùng enum chung `DRAFT | PENDING | PUBLISHED`. Vị trí mới mặc định ở
+`DRAFT`; EDITOR tạo được bản nháp, chỉ sửa được vị trí `DRAFT` và có thể gửi
+duyệt bằng `PATCH` chuyển `DRAFT → PENDING`. EDITOR không thể đăng trực tiếp,
+sửa nội dung đã gửi duyệt/đã đăng hoặc chuyển trạng thái lùi về. ADMIN và
+SUPER_ADMIN có thể chọn bất kỳ status nào trong enum chung. Request và response
+được Swagger mô tả tại `/api/docs`.
+
 ### Prisma và seed
 
 ```bash

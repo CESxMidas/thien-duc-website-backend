@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 
 /**
- * Loại email được ghi lại trong outbox test — khớp ba luồng gửi của MailService.
+ * Loại email được ghi lại trong outbox test, gồm cả mã xác nhận đổi mật khẩu.
  */
-export type OutboxMailType = 'contact' | 'invitation' | 'password-reset';
+export type OutboxMailType =
+  'contact' | 'invitation' | 'password-reset' | 'password-change';
 
 /**
  * Một email đã bị "gửi" trong chế độ transport giả (chỉ test). `url` chứa link

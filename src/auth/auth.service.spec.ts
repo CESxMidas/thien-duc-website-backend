@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import {
   BadRequestException,
   HttpException,
@@ -55,6 +56,7 @@ describe('AuthService', () => {
       updateMany: jest.Mock;
       findUniqueOrThrow: jest.Mock;
     };
+    passwordChangeCode: { findUnique: jest.Mock; updateMany: jest.Mock };
     passwordResetToken: {
       findFirst: jest.Mock;
       updateMany: jest.Mock;
@@ -78,6 +80,7 @@ describe('AuthService', () => {
         updateMany: jest.fn(),
         findUniqueOrThrow: jest.fn(),
       },
+      passwordChangeCode: { findUnique: jest.fn(), updateMany: jest.fn() },
       passwordResetToken: {
         findFirst: jest.fn(),
         updateMany: jest.fn(),
@@ -777,12 +780,18 @@ describe('AuthService', () => {
       // Cập nhật DUY NHẤT passwordHash.
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: eligibleUser.id },
-        data: { passwordHash: 'hashed-new-password' },
+        data: {
+          passwordHash: 'hashed-new-password',
+          tokenVersion: { increment: 1 },
+        },
       });
       const updateArg = firstCallArg<{ data: Record<string, unknown> }>(
         prisma.user.update,
       );
-      expect(Object.keys(updateArg.data)).toEqual(['passwordHash']);
+      expect(Object.keys(updateArg.data)).toEqual([
+        'passwordHash',
+        'tokenVersion',
+      ]);
       // Thu hồi mọi refresh token còn sống của tài khoản.
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
         where: { userId: eligibleUser.id, revokedAt: null },
@@ -906,6 +915,8 @@ describe('AuthService', () => {
 
   describe('changePassword', () => {
     const dto = {
+      challengeId: '00000000-0000-4000-8000-000000000001',
+      verificationCode: '123456',
       currentPassword: 'MatKhauCu123',
       newPassword: 'MatKhauMoi456',
       confirmPassword: 'MatKhauMoi456',
@@ -913,6 +924,7 @@ describe('AuthService', () => {
     const eligibleUser = {
       id: 'user-1',
       passwordHash: 'hashed',
+      email: 'admin@thienduc.vn',
       isActive: true,
       setupCompletedAt: new Date('2026-01-01T00:00:00.000Z'),
     };
@@ -923,6 +935,22 @@ describe('AuthService', () => {
      */
     function armHappyPath() {
       prisma.user.findUnique.mockResolvedValue(eligibleUser);
+      prisma.passwordChangeCode.findUnique.mockResolvedValue({
+        id: dto.challengeId,
+        email: eligibleUser.email,
+        attempts: 0,
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 600000),
+        passwordFingerprint: crypto
+          .createHash('sha256')
+          .update('hashed')
+          .digest('hex'),
+        codeHash: crypto
+          .createHmac('sha256', 'secret')
+          .update(dto.challengeId + ':123456')
+          .digest('hex'),
+      });
+      prisma.passwordChangeCode.updateMany.mockResolvedValue({ count: 1 });
       mockedCompare.mockResolvedValueOnce(true); // currentPassword đúng
       mockedCompare.mockResolvedValueOnce(false); // newPassword khác cũ
       prisma.user.update.mockResolvedValue({});
@@ -952,7 +980,10 @@ describe('AuthService', () => {
       expect(updated.data.passwordHash).toBe('hashed-new-password');
       expect(updated.data.passwordHash).not.toBe(dto.newPassword);
       // Chỉ chạm passwordHash — không role/email/isActive/lockedUntil.
-      expect(Object.keys(updated.data)).toEqual(['passwordHash']);
+      expect(Object.keys(updated.data)).toEqual([
+        'passwordHash',
+        'tokenVersion',
+      ]);
     });
 
     it('thu hồi TOÀN BỘ refresh token của tài khoản khi đổi thành công', async () => {
@@ -1101,7 +1132,7 @@ describe('AuthService', () => {
       expect(revoked.where.userId).toBe('user-1');
     });
 
-    it('select chỉ lấy đúng field cần thiết, không kéo theo email/role/name', async () => {
+    it('select chỉ lấy field mật khẩu và email cần để xác nhận, không lấy role/name', async () => {
       armHappyPath();
 
       await service.changePassword('user-1', dto);
@@ -1109,9 +1140,9 @@ describe('AuthService', () => {
       const read = firstCallArg<{ select: Record<string, boolean> }>(
         prisma.user.findUnique,
       );
-      // passwordHash cần cho bcrypt.compare, nhưng KHÔNG lấy kèm email/role/
-      // name để không vô tình lọt vào log hay response.
+      // Email dùng để đối chiếu người nhận mã; không lấy role/name và không trả hash.
       expect(Object.keys(read.select).sort()).toEqual([
+        'email',
         'id',
         'isActive',
         'passwordHash',

@@ -1,11 +1,17 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { RequestPasswordChangeCodeDto } from './dto/request-password-change-code.dto';
 import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -17,6 +23,35 @@ import { ValidatePasswordResetDto } from './dto/validate-password-reset.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('change-password/code')
+  @ApiOperation({
+    summary: 'Gửi mã xác nhận đổi mật khẩu tới email đã đăng ký',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Đã gửi mã; trả ID lượt gửi và email được che.',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Chưa hết thời gian chờ gửi lại mã.',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Không gửi được mã; mật khẩu chưa thay đổi.',
+  })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { limit: 5, ttl: 60 * 1000 } })
+  requestPasswordChangeCode(
+    @CurrentUser() user: { id: string },
+    @Body() dto: RequestPasswordChangeCodeDto,
+  ) {
+    return this.authService.requestPasswordChangeCode(
+      user.id,
+      dto.currentPassword,
+    );
+  }
 
   @Throttle({ default: { limit: 5, ttl: 60 * 1000 } })
   @Post('login')
@@ -95,6 +130,13 @@ export class AuthController {
    */
   @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
   @Post('change-password')
+  @ApiOperation({
+    summary: 'Đổi mật khẩu với mật khẩu hiện tại và mã email dùng một lần',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Mật khẩu đã đổi, tất cả phiên cũ mất hiệu lực.',
+  })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   changePassword(

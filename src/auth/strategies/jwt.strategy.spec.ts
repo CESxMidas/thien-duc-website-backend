@@ -32,7 +32,7 @@ describe('Access token sau khi xóa/khóa hoặc đổi vai trò tài khoản', 
     });
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: payload.sub, deletedAt: null, isActive: true },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, role: true, tokenVersion: true },
     });
   });
 
@@ -41,5 +41,25 @@ describe('Access token sau khi xóa/khóa hoặc đổi vai trò tài khoản', 
     await expect(strategy.validate(payload)).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('đổi mật khẩu làm token cũ mất hiệu lực; token phiên mới được chấp nhận', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: payload.sub,
+      email: payload.email,
+      role: Role.EDITOR,
+      tokenVersion: 1,
+    });
+    await expect(strategy.validate(payload)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    await expect(
+      strategy.validate({ ...payload, tokenVersion: 0 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(await strategy.validate({ ...payload, tokenVersion: 1 })).toEqual({
+      id: payload.sub,
+      email: payload.email,
+      role: Role.EDITOR,
+    });
   });
 });

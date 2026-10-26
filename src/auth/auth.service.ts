@@ -5,12 +5,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { Prisma } from '../../generated/prisma/client';
 import {
   generateOpaqueToken,
   hashOpaqueToken,
@@ -116,7 +118,7 @@ export class AuthService {
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
 
-    return this.issueTokens(user.id, user.email, user.role);
+    return this.issueTokens(user.id, user.email, user.role, user.tokenVersion);
   }
 
   async refresh(refreshToken: string) {
@@ -147,6 +149,7 @@ export class AuthService {
       stored.user.id,
       stored.user.email,
       stored.user.role,
+      stored.user.tokenVersion,
     );
   }
 
@@ -471,7 +474,7 @@ export class AuthService {
       // Cũng KHÔNG chạm lockedUntil ở phase này (không tự mở khóa tài khoản).
       await tx.user.update({
         where: { id: user.id },
-        data: { passwordHash },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
       });
 
       // Các token đặt lại khác (nếu có) của cùng tài khoản không còn dùng được.
@@ -528,6 +531,106 @@ export class AuthService {
    * Muốn cắt tức thì thì phải thêm `tokenVersion` — thay đổi schema, không nằm
    * trong phạm vi tính năng này.
    */
+  private passwordFingerprint(passwordHash: string): string {
+    return crypto.createHash('sha256').update(passwordHash).digest('hex');
+  }
+
+  private passwordCodeHash(challengeId: string, code: string): string {
+    const secret = this.configService.get<string>('JWT_ACCESS_SECRET');
+    if (!secret)
+      throw new ServiceUnavailableException(
+        'Chưa thể gửi mã xác nhận. Vui lòng liên hệ quản trị viên.',
+      );
+    return crypto
+      .createHmac('sha256', secret)
+      .update(`${challengeId}:${code}`)
+      .digest('hex');
+  }
+
+  async requestPasswordChangeCode(userId: string, currentPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        isActive: true,
+        setupCompletedAt: true,
+      },
+    });
+    if (!user?.isActive || user.setupCompletedAt === null)
+      throw new BadRequestException(
+        'Tài khoản không ở trạng thái đổi được mật khẩu.',
+      );
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash)))
+      throw new BadRequestException('Mật khẩu hiện tại không đúng.');
+    const now = new Date();
+    const id = crypto.randomUUID();
+    const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const expiresAt = new Date(now.getTime() + 10 * 60_000);
+    try {
+      await this.prisma.$transaction(
+        async (tx) => {
+          const last = await tx.passwordChangeCode.findUnique({
+            where: { userId },
+          });
+          if (last && now.getTime() - last.sentAt.getTime() < 60_000)
+            throw new HttpException(
+              'Vui lòng chờ 60 giây giữa hai lần gửi mã.',
+              HttpStatus.TOO_MANY_REQUESTS,
+            );
+          const data = {
+            id,
+            codeHash: this.passwordCodeHash(id, code),
+            passwordFingerprint: this.passwordFingerprint(user.passwordHash),
+            email: user.email,
+            attempts: 0,
+            sentAt: now,
+            expiresAt,
+            usedAt: null,
+          };
+          await tx.passwordChangeCode.upsert({
+            where: { userId },
+            create: { userId, ...data },
+            update: data,
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2034'
+      )
+        throw new HttpException(
+          'Một yêu cầu gửi mã khác đang được xử lý. Vui lòng thử lại sau.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      throw error;
+    }
+    const sent = await this.mailService.sendPasswordChangeCode({
+      to: user.email,
+      code,
+      expiresAt,
+    });
+    if (!sent) {
+      await this.prisma.passwordChangeCode.updateMany({
+        where: { id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      throw new ServiceUnavailableException(
+        'Không gửi được mã xác nhận. Vui lòng thử lại sau một phút hoặc liên hệ quản trị viên.',
+      );
+    }
+    const [local, domain] = user.email.split('@');
+    return {
+      challengeId: id,
+      maskedEmail: `${local.slice(0, 1)}***@${domain}`,
+      expiresAt: expiresAt.toISOString(),
+      resendAvailableAt: new Date(now.getTime() + 60_000).toISOString(),
+    };
+  }
+
   async changePassword(userId: string, dto: ChangePasswordDto) {
     // Cùng khuôn với resetPassword/acceptInvitation: đối chiếu xác nhận ở
     // service chứ không ở DTO (class-validator không so được hai field).
@@ -540,6 +643,7 @@ export class AuthService {
       select: {
         id: true,
         passwordHash: true,
+        email: true,
         isActive: true,
         setupCompletedAt: true,
       },
@@ -579,6 +683,43 @@ export class AuthService {
       );
     }
 
+    const challenge = await this.prisma.passwordChangeCode.findUnique({
+      where: { userId },
+    });
+    const invalidCode =
+      'Mã xác nhận không hợp lệ, đã hết hạn hoặc đã dùng. Vui lòng gửi lại mã.';
+    if (
+      !challenge ||
+      challenge.id !== dto.challengeId ||
+      challenge.usedAt ||
+      challenge.attempts >= 5 ||
+      challenge.expiresAt.getTime() <= Date.now() ||
+      challenge.email !== user.email ||
+      challenge.passwordFingerprint !==
+        this.passwordFingerprint(user.passwordHash) ||
+      !/^\d{6}$/.test(dto.verificationCode ?? '')
+    )
+      throw new BadRequestException(invalidCode);
+    const actual = this.passwordCodeHash(challenge.id, dto.verificationCode);
+    if (
+      !crypto.timingSafeEqual(
+        Buffer.from(actual, 'hex'),
+        Buffer.from(challenge.codeHash, 'hex'),
+      )
+    ) {
+      await this.prisma.passwordChangeCode.updateMany({
+        where: {
+          id: challenge.id,
+          codeHash: challenge.codeHash,
+          usedAt: null,
+          attempts: { lt: 5 },
+        },
+        data: { attempts: { increment: 1 } },
+      });
+      throw new BadRequestException(
+        'Mã xác nhận không đúng. Sau 5 lần nhập sai, bạn cần gửi lại mã.',
+      );
+    }
     const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
     const now = new Date();
 
@@ -588,15 +729,37 @@ export class AuthService {
     // ngoài transaction nên sẽ KHÔNG rollback cùng — đúng lý do đã ghi ở
     // `resetPassword`.
     await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.passwordChangeCode.updateMany({
+        where: {
+          id: challenge.id,
+          userId,
+          codeHash: challenge.codeHash,
+          usedAt: null,
+          expiresAt: { gt: now },
+          attempts: { lt: 5 },
+        },
+        data: { usedAt: now },
+      });
+      if (claimed.count !== 1) throw new BadRequestException(invalidCode);
       // Chỉ chạm passwordHash — không đụng role/email/hồ sơ/isActive, và cũng
       // KHÔNG chạm lockedUntil (không tự mở khóa tài khoản đang bị khóa).
       await tx.user.update({
-        where: { id: user.id },
-        data: { passwordHash },
+        where: {
+          id: user.id,
+          passwordHash: user.passwordHash,
+          email: user.email,
+          isActive: true,
+          deletedAt: null,
+        },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
       });
 
       await tx.refreshToken.updateMany({
         where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null, revokedAt: null },
         data: { revokedAt: now },
       });
     });
@@ -610,8 +773,13 @@ export class AuthService {
     };
   }
 
-  private async issueTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  private async issueTokens(
+    userId: string,
+    email: string,
+    role: string,
+    tokenVersion = 0,
+  ) {
+    const payload = { sub: userId, email, role, tokenVersion };
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
       expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRES_IN') ??

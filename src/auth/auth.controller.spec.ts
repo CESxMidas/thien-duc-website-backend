@@ -242,6 +242,8 @@ describe('AuthController - Rate Limiting (SEC-RATE-001)', () => {
 
   describe('change-password endpoint', () => {
     const dto = {
+      challengeId: '00000000-0000-4000-8000-000000000001',
+      verificationCode: '123456',
       currentPassword: 'MatKhauCu123',
       newPassword: 'MatKhauMoi456',
       confirmPassword: 'MatKhauMoi456',

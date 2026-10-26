@@ -47,6 +47,7 @@ enum ProfileChangeStatus {
 }
 
 model User {
+  tokenVersion        Int       @default(0) @map("token_version")
   deletedAt           DateTime? @map("deleted_at")
   deletedBy           String?   @map("deleted_by")
   id                  String    @id @default(uuid())
@@ -78,9 +79,25 @@ model User {
   invitationsReceived    AccountInvitation[]    @relation("InvitationRecipient")
   invitationsSent        AccountInvitation[]    @relation("InvitationSender")
   passwordResetTokens    PasswordResetToken[]
+  passwordChangeCode     PasswordChangeCode?
 
   @@index([deletedAt])
   @@map("users")
+}
+
+model PasswordChangeCode {
+  id                  String    @id @default(uuid())
+  userId              String    @unique @map("user_id")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash            String    @map("code_hash")
+  passwordFingerprint String    @map("password_fingerprint")
+  email               String
+  attempts            Int       @default(0)
+  sentAt              DateTime  @default(now()) @map("sent_at")
+  expiresAt           DateTime  @map("expires_at")
+  usedAt              DateTime? @map("used_at")
+
+  @@map("password_change_codes")
 }
 
 /**

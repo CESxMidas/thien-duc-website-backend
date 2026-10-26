@@ -354,6 +354,37 @@ export class MailService implements OnModuleInit {
    * (response quên mật khẩu phải trung tính). KHÔNG log token, không log reset
    * URL, không log payload email.
    */
+  async sendPasswordChangeCode(data: {
+    to: string;
+    code: string;
+    expiresAt: Date;
+  }): Promise<boolean> {
+    const text = `Mã xác nhận đổi mật khẩu Thiên Đức CMS: ${data.code}. Mã có hiệu lực đến ${VN_DATETIME.format(data.expiresAt)} và chỉ dùng một lần. Không chia sẻ mã này. Nếu không yêu cầu đổi mật khẩu, hãy bỏ qua email.`;
+    const email = {
+      to: data.to,
+      subject: 'Mã xác nhận đổi mật khẩu CMS',
+      text,
+      html: `<p>Mã xác nhận đổi mật khẩu Thiên Đức CMS:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${escapeHtml(data.code)}</p><p>Hết hạn lúc ${escapeHtml(VN_DATETIME.format(data.expiresAt))}. Mã chỉ dùng một lần. Không chia sẻ mã này.</p><p>Nếu không yêu cầu đổi mật khẩu, hãy bỏ qua email.</p>`,
+    };
+    if (this.fakeTransport) {
+      if (!this.outbox || this.outbox.isFailMode()) return false;
+      this.captureToOutbox('password-change', { ...email, url: null });
+      return true;
+    }
+    if (!this.resend) return false;
+    try {
+      const result = await this.resend.emails.send({
+        from: this.from,
+        ...email,
+      });
+      return !result.error && Boolean(result.data?.id);
+    } catch {
+      // Không log mã, người nhận hoặc lỗi provider có thể chứa payload email.
+      this.logger.warn('Không gửi được mã xác nhận đổi mật khẩu.');
+      return false;
+    }
+  }
+
   async sendPasswordResetEmail(data: PasswordResetData): Promise<void> {
     if (this.fakeTransport) {
       const base = this.adminAppUrl || 'http://localhost:5174';
@@ -444,7 +475,7 @@ export class MailService implements OnModuleInit {
    * KHÔNG log recipient/subject/URL/token để không rò dữ liệu nhạy cảm ra log.
    */
   private captureToOutbox(
-    type: 'contact' | 'invitation' | 'password-reset',
+    type: 'contact' | 'invitation' | 'password-reset' | 'password-change',
     entry: {
       to: string;
       subject: string;

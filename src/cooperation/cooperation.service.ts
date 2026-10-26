@@ -1,3 +1,4 @@
+import { CONTENT_ORDER } from '../common/content-order';
 import {
   BadRequestException,
   ConflictException,
@@ -55,7 +56,7 @@ export class CooperationService {
       where: publishedOnly
         ? cooperationPubliclyVisibleWhere(new Date())
         : undefined,
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [...CONTENT_ORDER],
     });
   }
 

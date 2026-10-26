@@ -178,7 +178,11 @@ describe('Hiển thị công khai của dự án hợp tác', () => {
       await service.findAll(true);
 
       const [{ orderBy }] = findMany.mock.calls[0] as [{ orderBy: unknown }];
-      expect(orderBy).toEqual([{ order: 'asc' }, { createdAt: 'asc' }]);
+      expect(orderBy).toEqual([
+        { order: 'asc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
+      ]);
     });
   });
 });

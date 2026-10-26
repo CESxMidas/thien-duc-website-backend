@@ -113,7 +113,11 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     await service.findAllPaginated(3, 9, 'tin-du-an');
     const { findArgs } = queries();
 
-    expect(findArgs.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
+    expect(findArgs.orderBy).toEqual([
+      { order: 'asc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
     expect(findArgs.skip).toBeUndefined();
     expect(findArgs.take).toBeUndefined();
   });

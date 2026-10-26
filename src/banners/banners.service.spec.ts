@@ -255,11 +255,12 @@ describe('BannersService — cửa sổ hiển thị', () => {
       });
     });
 
-    it('công khai: giữ nguyên thứ tự order → createdAt như trước Batch 12', async () => {
+    it('công khai: thứ tự đặt trước, banner mới tạo lên trước khi trùng thứ tự', async () => {
       await service.findAll(true, NOW);
       expect(findManyArgs().orderBy).toEqual([
         { order: 'asc' },
-        { createdAt: 'asc' },
+        { createdAt: 'desc' },
+        { id: 'desc' },
       ]);
     });
 

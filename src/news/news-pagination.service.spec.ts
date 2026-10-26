@@ -23,10 +23,12 @@ function publiclyVisible(now: Date) {
 function row(
   id: string,
   {
+    order = 0,
     eventDate = null,
     publishedAt = null,
     createdAt = '2026-01-01T00:00:00.000Z',
   }: {
+    order?: number;
     eventDate?: string | null;
     publishedAt?: string | null;
     createdAt?: string;
@@ -34,6 +36,7 @@ function row(
 ) {
   return {
     id,
+    order,
     eventDate: eventDate ? new Date(eventDate) : null,
     publishedAt: publishedAt ? new Date(publishedAt) : null,
     createdAt: new Date(createdAt),
@@ -96,7 +99,7 @@ describe('NewsService.findAllPaginated', () => {
     jest.useRealTimers();
   });
 
-  it('chỉ lấy bài công khai, rồi service xếp theo ngày hiệu lực mới nhất trước', async () => {
+  it('chỉ lấy bài công khai, ưu tiên thứ tự đã lưu rồi ngày tạo mới', async () => {
     prisma.newsPost.count.mockResolvedValue(0);
     prisma.newsPost.findMany.mockResolvedValue([]);
 
@@ -105,7 +108,11 @@ describe('NewsService.findAllPaginated', () => {
 
     expect(countArgs.where).toEqual(publiclyVisible(NOW));
     expect(findArgs.where).toEqual(publiclyVisible(NOW));
-    expect(findArgs.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
+    expect(findArgs.orderBy).toEqual([
+      { order: 'asc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
   });
 
   it('đếm và lấy trang chạy trong cùng một transaction', async () => {
@@ -117,7 +124,7 @@ describe('NewsService.findAllPaginated', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('cắt trang sau khi sort theo ngày hiệu lực để pagination không lặp/lệch bài', async () => {
+  it('cắt trang sau khi xếp theo thứ tự hiển thị, không lặp/lệch bài', async () => {
     prisma.newsPost.count.mockResolvedValue(30);
     prisma.newsPost.findMany.mockResolvedValue(rows(30));
 
@@ -139,7 +146,7 @@ describe('NewsService.findAllPaginated', () => {
     ]);
   });
 
-  it('sắp xếp DESC theo eventDate, fallback publishedAt, fallback createdAt', async () => {
+  it('ưu tiên ngày tạo mới, không đưa ngày sự kiện lên trên thứ tự nội dung', async () => {
     prisma.newsPost.count.mockResolvedValue(4);
     prisma.newsPost.findMany.mockResolvedValue([
       row('created-fallback', {
@@ -164,11 +171,29 @@ describe('NewsService.findAllPaginated', () => {
     const result = await service.findAllPaginated(1, 9);
 
     expect(result.items.map((item) => item.id)).toEqual([
-      'event-wins',
       'published-fallback',
       'older-event',
       'created-fallback',
+      'event-wins',
     ]);
+  });
+
+  it('thứ tự do admin lưu được ưu tiên cao hơn ngày tạo và ngày sự kiện', async () => {
+    prisma.newsPost.count.mockResolvedValue(2);
+    prisma.newsPost.findMany.mockResolvedValue([
+      row('newer', {
+        order: 1,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        eventDate: '2026-10-01T00:00:00.000Z',
+      }),
+      row('pinned-first', { order: 0, createdAt: '2020-01-01T00:00:00.000Z' }),
+    ]);
+    expect(
+      (await service.findAllPaginated(1, 1)).items.map((item) => item.id),
+    ).toEqual(['pinned-first']);
+    expect(
+      (await service.findAllPaginated(2, 1)).items.map((item) => item.id),
+    ).toEqual(['newer']);
   });
 
   it('trang 1: totalPages làm tròn lên, hasNextPage true, hasPreviousPage false', async () => {
@@ -250,7 +275,7 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
     jest.useRealTimers();
   });
 
-  it('route công khai: chỉ bài công khai và sort theo ngày hiệu lực', async () => {
+  it('route công khai: chỉ bài công khai, ưu tiên bài mới tạo', async () => {
     prisma.newsPost.findMany.mockResolvedValue([
       row('published-fallback', { publishedAt: '2026-08-18T00:00:00.000Z' }),
       row('event-wins', { eventDate: '2026-08-20T00:00:00.000Z' }),
@@ -263,21 +288,29 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
     ];
 
     expect(args.where).toEqual(publiclyVisible(NOW));
-    expect(args.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
+    expect(args.orderBy).toEqual([
+      { order: 'asc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
     expect(result.map((item) => item.id)).toEqual([
-      'event-wins',
-      'published-fallback',
       'created-fallback',
+      'published-fallback',
+      'event-wins',
     ]);
   });
 
-  it('route admin: không lọc trạng thái, updatedAt desc + id desc', async () => {
+  it('route admin: không lọc trạng thái, dùng cùng thứ tự hiển thị với frontend', async () => {
     await service.findAll(false);
     const [args] = prisma.newsPost.findMany.mock.calls[0] as [
       { where: unknown; orderBy: unknown },
     ];
 
     expect(args.where).toBeUndefined();
-    expect(args.orderBy).toEqual([{ updatedAt: 'desc' }, { id: 'desc' }]);
+    expect(args.orderBy).toEqual([
+      { order: 'asc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
   });
 });

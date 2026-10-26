@@ -22,10 +22,21 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateRecruitmentPositionDto } from './dto/create-recruitment-position.dto';
 import { UpdateRecruitmentPositionDto } from './dto/update-recruitment-position.dto';
 import { RecruitmentPositionsService } from './recruitment-positions.service';
+import { ReorderContentDto } from '../common/dto/reorder-content.dto';
 
 @ApiTags('recruitment-positions')
 @Controller('recruitment-positions')
 export class RecruitmentPositionsController {
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sắp xếp vị trí tuyển dụng.' })
+  @ApiResponse({ status: 200, description: 'Đã lưu thứ tự.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('admin/reorder')
+  reorder(@Body() dto: ReorderContentDto) {
+    return this.recruitmentPositionsService.reorder(dto.ids);
+  }
+
   constructor(
     private readonly recruitmentPositionsService: RecruitmentPositionsService,
   ) {}

@@ -1,3 +1,5 @@
+import { reorderContent } from '../common/content-order';
+import { CONTENT_ORDER } from '../common/content-order';
 import {
   ConflictException,
   Injectable,
@@ -36,7 +38,7 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /** Ảnh và hạng mục luôn trả theo `order` tăng dần — thứ tự do biên tập viên đặt. */
-const BY_ORDER = { order: 'asc' } as const;
+const BY_ORDER = [...CONTENT_ORDER];
 
 /** Thông điệp 403 khi EDITOR sửa nội dung của dự án đã xuất bản. */
 const EDIT_DENIED_MESSAGE =
@@ -79,6 +81,17 @@ function normalizeJsonNulls<T extends object>(dto: T): T {
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async reorderItems(slug: string, ids: string[]) {
+    const project = await this.findBySlug(slug);
+    return reorderContent(this.prisma, 'projectItem', ids, {
+      projectId: project.id,
+    });
+  }
+
+  reorder(ids: string[]) {
+    return reorderContent(this.prisma, 'project', ids);
+  }
+
   /**
    * `publishedOnly` = true cho website công khai — lọc theo luật hiển thị dùng
    * chung (`projectPubliclyVisibleWhere`), nên dự án đã tới hạn lên lịch xuất
@@ -92,7 +105,7 @@ export class ProjectsService {
       where: publishedOnly
         ? projectPubliclyVisibleWhere(new Date())
         : undefined,
-      orderBy: { order: 'asc' },
+      orderBy: [...CONTENT_ORDER],
       include: {
         items: {
           where: publishedOnly ? { isActive: true } : undefined,

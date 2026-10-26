@@ -1,3 +1,4 @@
+import { CONTENT_ORDER, reorderContent } from '../common/content-order';
 import {
   ConflictException,
   ForbiddenException,
@@ -48,20 +49,24 @@ function dateOnlyToUtcDate(value: string | null | undefined) {
 export class RecruitmentPositionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  reorder(ids: string[]) {
+    return reorderContent(this.prisma, 'recruitmentPosition', ids);
+  }
+
   async findAllPublic(now = new Date()) {
     const positions = await this.prisma.recruitmentPosition.findMany({
       where: {
         status: ContentStatus.PUBLISHED,
         OR: [{ deadline: null }, { deadline: { gte: vietnameseToday(now) } }],
       },
-      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [...CONTENT_ORDER],
     });
     return positions.map(serializeDeadline);
   }
 
   async findAllForAdmin() {
     const positions = await this.prisma.recruitmentPosition.findMany({
-      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [...CONTENT_ORDER],
     });
     return positions.map(serializeDeadline);
   }

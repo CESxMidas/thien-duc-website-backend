@@ -73,7 +73,7 @@ describe('RecruitmentPositionsService', () => {
           { deadline: { gte: new Date('2026-10-22T00:00:00.000Z') } },
         ],
       },
-      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
     });
     expect(result[0].deadline).toBe('2026-12-31');
   });
@@ -91,7 +91,7 @@ describe('RecruitmentPositionsService', () => {
           { deadline: { gte: new Date('2026-10-23T00:00:00.000Z') } },
         ],
       },
-      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
     });
   });
 
@@ -103,7 +103,7 @@ describe('RecruitmentPositionsService', () => {
     const result = await service.findAllForAdmin();
 
     expect(prisma.recruitmentPosition.findMany).toHaveBeenCalledWith({
-      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ order: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
     });
     expect(result[0]).toMatchObject({
       status: ContentStatus.PENDING,

@@ -1,3 +1,4 @@
+import { CONTENT_ORDER } from '../common/content-order';
 import {
   BadRequestException,
   Injectable,
@@ -44,7 +45,7 @@ export class BannersService {
       // Cửa sổ hiển thị chỉ LOẠI BỎ hàng, không đụng tới `order`: banner còn lại
       // giữ nguyên thứ tự tương đối như trước Batch 12.
       where: activeOnly ? bannerPubliclyVisibleWhere(now) : undefined,
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [...CONTENT_ORDER],
     });
   }
 

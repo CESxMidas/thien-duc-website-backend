@@ -1,3 +1,4 @@
+import { ReorderContentDto } from '../common/dto/reorder-content.dto';
 import {
   Body,
   Controller,
@@ -37,6 +38,16 @@ export class NewsController {
     private readonly newsService: NewsService,
     private readonly newsSchedulerService: NewsSchedulerService,
   ) {}
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sắp xếp thứ tự hiển thị nội dung.' })
+  @ApiResponse({ status: 200, description: 'Đã lưu thứ tự.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('admin/reorder')
+  reorder(@Body() dto: ReorderContentDto) {
+    return this.newsService.reorder(dto.ids);
+  }
 
   // Các route tĩnh (`categories`, `admin`) phải khai báo trước `:slug`,
   // nếu không Nest sẽ khớp chúng vào tham số slug.

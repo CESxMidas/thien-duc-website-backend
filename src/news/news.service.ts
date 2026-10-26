@@ -1,3 +1,5 @@
+import { reorderContent } from '../common/content-order';
+import { CONTENT_ORDER } from '../common/content-order';
 import {
   ConflictException,
   Injectable,
@@ -58,6 +60,7 @@ type NewsPublicationState = {
 
 type NewsListOrderable = {
   id: string;
+  order?: number;
   eventDate: Date | null;
   publishedAt: Date | null;
   createdAt: Date;
@@ -76,23 +79,24 @@ function toScheduleState(post: NewsPublicationState): ScheduleState {
 const EDIT_DENIED_MESSAGE =
   'Bài viết đã được lên lịch hoặc đã xuất bản nên biên tập viên không sửa được nội dung. Hãy nhờ quản trị viên.';
 
-function effectiveNewsDate(post: NewsListOrderable) {
-  return post.eventDate ?? post.publishedAt ?? post.createdAt;
-}
-
 function compareNewsForPublicList(
   first: NewsListOrderable,
   second: NewsListOrderable,
 ) {
-  const byDate =
-    effectiveNewsDate(second).getTime() - effectiveNewsDate(first).getTime();
-  if (byDate !== 0) return byDate;
-  return second.id.localeCompare(first.id);
+  return (
+    (first.order ?? 0) - (second.order ?? 0) ||
+    second.createdAt.getTime() - first.createdAt.getTime() ||
+    second.id.localeCompare(first.id)
+  );
 }
 
 @Injectable()
 export class NewsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  reorder(ids: string[]) {
+    return reorderContent(this.prisma, 'newsPost', ids);
+  }
 
   // ----- Bài viết -----
 
@@ -104,7 +108,7 @@ export class NewsService {
   findAll(publishedOnly = false) {
     const posts = this.prisma.newsPost.findMany({
       where: publishedOnly ? publiclyVisibleWhere(new Date()) : undefined,
-      orderBy: this.listOrderBy(publishedOnly),
+      orderBy: this.listOrderBy(),
       include: { category: true },
     });
 
@@ -140,7 +144,7 @@ export class NewsService {
       this.prisma.newsPost.count({ where }),
       this.prisma.newsPost.findMany({
         where,
-        orderBy: this.listOrderBy(true),
+        orderBy: this.listOrderBy(),
         include: { category: true },
       }),
     ]);
@@ -165,20 +169,15 @@ export class NewsService {
   }
 
   /**
-   * Bài nháp chưa có `publishedAt` nên màn admin sắp theo `updatedAt`, không thì
-   * bị dồn xuống cuối danh sách.
+   * Admin và website cùng tôn trọng thứ tự đã lưu. Bản ghi mới có order = 0,
+   * nên đứng trước bản ghi cùng thứ tự nhờ createdAt DESC.
    *
-   * Khoá phụ `id desc` là **bắt buộc** cho danh sách công khai: nhiều bài nhập
-   * cùng đợt có `publishedAt` trùng nhau tới từng giây, mà `ORDER BY` một khoá
+   * Khóa phụ `id desc` giữ ổn định khi ngày tạo trùng nhau; `ORDER BY` một khóa
    * không phân định được thì Postgres được phép trả thứ tự khác nhau giữa các
    * lần chạy — phân trang sẽ lặp bài ở trang này và nuốt bài ở trang kia.
    */
-  private listOrderBy(
-    publishedOnly: boolean,
-  ): Prisma.NewsPostOrderByWithRelationInput[] {
-    return publishedOnly
-      ? [{ publishedAt: 'desc' }, { id: 'desc' }]
-      : [{ updatedAt: 'desc' }, { id: 'desc' }];
+  private listOrderBy(): Prisma.NewsPostOrderByWithRelationInput[] {
+    return [...CONTENT_ORDER];
   }
 
   /**

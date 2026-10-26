@@ -1,3 +1,4 @@
+import { ReorderContentDto } from '../common/dto/reorder-content.dto';
 import {
   Body,
   Controller,
@@ -38,6 +39,26 @@ export class ProjectsController {
     private readonly projectsService: ProjectsService,
     private readonly projectsSchedulerService: ProjectsSchedulerService,
   ) {}
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sắp xếp thứ tự hiển thị nội dung.' })
+  @ApiResponse({ status: 200, description: 'Đã lưu thứ tự.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('admin/reorder')
+  reorder(@Body() dto: ReorderContentDto) {
+    return this.projectsService.reorder(dto.ids);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sắp xếp hạng mục trong dự án.' })
+  @ApiResponse({ status: 200, description: 'Đã lưu thứ tự hạng mục.' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Patch('admin/:slug/items/reorder')
+  reorderItems(@Param('slug') slug: string, @Body() dto: ReorderContentDto) {
+    return this.projectsService.reorderItems(slug, dto.ids);
+  }
 
   /**
    * Kích hoạt thủ công lượt đăng dự án theo lịch. Cron nội bộ chỉ chạy khi tiến

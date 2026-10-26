@@ -10,7 +10,7 @@ export const CONTENT_ORDER = [
 
 type OrderableModel =
   'project' | 'projectItem' | 'newsPost' | 'recruitmentPosition';
-type OrderWhere = { id?: string; projectId?: string };
+type OrderWhere = { id?: string; projectId?: string; deletedAt?: null };
 interface OrderableDelegate {
   findMany(args: {
     where: OrderWhere;
@@ -39,7 +39,7 @@ export async function reorderContent(
       async (tx) => {
         const table: OrderableDelegate = tx[model];
         const current = await table.findMany({
-          where: scope,
+          where: { ...scope, deletedAt: null },
           select: { id: true },
         });
         const existing = new Set(current.map((item) => item.id));

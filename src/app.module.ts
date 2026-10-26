@@ -20,6 +20,7 @@ import { SearchModule } from './search/search.module';
 import { SettingsModule } from './settings/settings.module';
 import { RecruitmentPositionsModule } from './recruitment-positions/recruitment-positions.module';
 import { TestSupportModule } from './test-support/test-support.module';
+import { CmsTrashModule } from './cms-trash/cms-trash.module';
 
 /**
  * Module hỗ trợ test chỉ được nạp khi CẢ HAI đúng: NODE_ENV=test và cờ tường
@@ -49,6 +50,7 @@ const testSupportModules =
     MediaModule,
     SearchModule,
     SettingsModule,
+    CmsTrashModule,
     RecruitmentPositionsModule,
     ...testSupportModules,
   ],

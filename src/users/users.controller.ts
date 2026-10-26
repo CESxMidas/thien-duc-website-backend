@@ -20,6 +20,7 @@ import { ReviewProfileRequestDto } from './dto/review-profile-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
+import { UpdateDeletePermissionsDto } from './dto/update-delete-permissions.dto';
 
 type Actor = { id: string; role: Role };
 
@@ -117,6 +118,23 @@ export class UsersController {
     @CurrentUser() actor: Actor,
   ) {
     return this.usersService.update(id, dto, actor.id);
+  }
+
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Super Admin cấp hoặc thu hồi quyền xóa chung toàn CMS',
+  })
+  @Patch(':id/delete-permissions')
+  updateDeletePermissions(
+    @Param('id') id: string,
+    @Body() dto: UpdateDeletePermissionsDto,
+    @CurrentUser() actor: Actor,
+  ) {
+    return this.usersService.updateDeletePermissions(
+      id,
+      dto.canDeleteCms,
+      actor.id,
+    );
   }
 
   @Roles(Role.SUPER_ADMIN)

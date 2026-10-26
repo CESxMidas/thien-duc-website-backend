@@ -141,14 +141,17 @@ describe('Hiển thị công khai của trang nội dung', () => {
       await service.findAll(true);
 
       const [{ where }] = findMany.mock.calls[0] as [{ where: unknown }];
-      expect(where).toEqual(pagePubliclyVisibleWhere(NOW));
+      expect(where).toEqual({
+        ...pagePubliclyVisibleWhere(NOW),
+        deletedAt: null,
+      });
     });
 
     it('danh sách Admin vẫn thấy mọi trạng thái', async () => {
       await service.findAll(false);
 
       const [{ where }] = findMany.mock.calls[0] as [{ where?: unknown }];
-      expect(where).toBeUndefined();
+      expect(where).toEqual({ deletedAt: null });
     });
 
     it.each(CASES)(

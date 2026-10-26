@@ -47,11 +47,14 @@ enum ProfileChangeStatus {
 }
 
 model User {
+  deletedAt           DateTime? @map("deleted_at")
+  deletedBy           String?   @map("deleted_by")
   id                  String    @id @default(uuid())
   email               String    @unique
   passwordHash        String    @map("password_hash")
   name                String
   role                Role      @default(EDITOR)
+  canDeleteCms        Boolean   @default(false) @map("can_delete_cms")
   // Thông tin hồ sơ nhân viên (chuẩn doanh nghiệp) — đều tùy chọn.
   phone               String?
   avatarUrl           String?   @map("avatar_url")
@@ -76,6 +79,7 @@ model User {
   invitationsSent        AccountInvitation[]    @relation("InvitationSender")
   passwordResetTokens    PasswordResetToken[]
 
+  @@index([deletedAt])
   @@map("users")
 }
 
@@ -137,6 +141,8 @@ model AccountInvitation {
  * người chỉ giữ một yêu cầu PENDING tại một thời điểm (xem service).
  */
 model ProfileChangeRequest {
+  deletedAt    DateTime?           @map("deleted_at")
+  deletedBy    String?             @map("deleted_by")
   id           String              @id @default(uuid())
   userId       String              @map("user_id")
   user         User                @relation("ProfileChangeRequester", fields: [userId], references: [id], onDelete: Cascade)
@@ -168,6 +174,8 @@ model RefreshToken {
 }
 
 model Project {
+  deletedAt       DateTime?     @map("deleted_at")
+  deletedBy       String?       @map("deleted_by")
   id              String        @id @default(uuid())
   slug            String        @unique
   title           Json
@@ -195,10 +203,13 @@ model Project {
   items         ProjectItem[]
   galleryImages ProjectGalleryImage[]
 
+  @@index([deletedAt])
   @@map("projects")
 }
 
 model ProjectItem {
+  deletedAt       DateTime?      @map("deleted_at")
+  deletedBy       String?        @map("deleted_by")
   id              String         @id @default(uuid())
   projectId       String         @map("project_id")
   project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -219,10 +230,13 @@ model ProjectItem {
   galleryImages ProjectGalleryImage[]
 
   @@unique([projectId, slug])
+  @@index([deletedAt])
   @@map("project_items")
 }
 
 model ProjectGalleryImage {
+  deletedAt     DateTime?    @map("deleted_at")
+  deletedBy     String?      @map("deleted_by")
   id            String       @id @default(uuid())
   projectId     String       @map("project_id")
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -235,22 +249,28 @@ model ProjectGalleryImage {
   createdAt     DateTime     @default(now()) @map("created_at")
 
   @@index([projectId])
+  @@index([deletedAt])
   @@map("project_gallery")
 }
 
 model NewsCategory {
-  id       String  @id @default(uuid())
-  slug     String  @unique
-  name     Json
-  order    Int     @default(0)
-  isActive Boolean @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by")
+  id        String    @id @default(uuid())
+  slug      String    @unique
+  name      Json
+  order     Int       @default(0)
+  isActive  Boolean   @default(true) @map("is_active")
 
   posts NewsPost[]
 
+  @@index([deletedAt])
   @@map("news_categories")
 }
 
 model NewsPost {
+  deletedAt    DateTime?     @map("deleted_at")
+  deletedBy    String?       @map("deleted_by")
   id           String        @id @default(uuid())
   order        Int           @default(0)
   slug         String        @unique
@@ -279,10 +299,13 @@ model NewsPost {
   // Không có index này, mỗi lần mở một chuyên mục là một lượt quét toàn bảng.
   @@index([categoryId, status, publishedAt], map: "news_posts_category_status_published_idx")
   @@index([order, createdAt(sort: Desc), id(sort: Desc)], map: "news_posts_order_created_at_id_idx")
+  @@index([deletedAt])
   @@map("news_posts")
 }
 
 model Page {
+  deletedAt   DateTime?     @map("deleted_at")
+  deletedBy   String?       @map("deleted_by")
   id          String        @id @default(uuid())
   slug        String        @unique
   title       Json
@@ -299,10 +322,13 @@ model Page {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
+  @@index([deletedAt])
   @@map("pages")
 }
 
 model RecruitmentPosition {
+  deletedAt        DateTime?     @map("deleted_at")
+  deletedBy        String?       @map("deleted_by")
   id               String        @id @default(uuid())
   slug             String        @unique
   title            Json
@@ -320,10 +346,13 @@ model RecruitmentPosition {
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
   @@index([status, deadline, order], map: "recruitment_positions_public_idx")
+  @@index([deletedAt])
   @@map("recruitment_positions")
 }
 
 model Banner {
+  deletedAt      DateTime? @map("deleted_at")
+  deletedBy      String?   @map("deleted_by")
   id             String    @id @default(uuid())
   image          String
   eyebrow        Json?
@@ -353,6 +382,7 @@ model Banner {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
+  @@index([deletedAt])
   @@map("banners")
 }
 
@@ -360,6 +390,8 @@ model Banner {
 // Khác `Project`: không có trang chi tiết, không ảnh, không dùng enum `ProjectStatus`.
 // Hiển thị ở section "Dự án hợp tác" trang chủ. Mọi field chữ đều song ngữ {vi, en?}.
 model CooperationProject {
+  deletedAt     DateTime?     @map("deleted_at")
+  deletedBy     String?       @map("deleted_by")
   id            String        @id @default(uuid())
   name          Json
   location      Json
@@ -385,10 +417,13 @@ model CooperationProject {
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
+  @@index([deletedAt])
   @@map("cooperation_projects")
 }
 
 model ContactSubmission {
+  deletedAt    DateTime?        @map("deleted_at")
+  deletedBy    String?          @map("deleted_by")
   id           String           @id @default(uuid())
   name         String
   phone        String
@@ -401,23 +436,27 @@ model ContactSubmission {
   createdAt    DateTime         @default(now()) @map("created_at")
   updatedAt    DateTime         @updatedAt @map("updated_at")
 
+  @@index([deletedAt])
   @@map("contact_submissions")
 }
 
 model MediaAsset {
-  id           String   @id @default(uuid())
+  deletedAt    DateTime? @map("deleted_at")
+  deletedBy    String?   @map("deleted_by")
+  id           String    @id @default(uuid())
   url          String
-  publicId     String?  @map("public_id")
+  publicId     String?   @map("public_id")
   width        Int?
   height       Int?
   format       String?
   bytes        Int?
   folder       String?
-  uploadedById String?  @map("uploaded_by_id")
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
+  uploadedById String?   @map("uploaded_by_id")
+  uploadedBy   User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
+  @@index([deletedAt])
   @@map("media_assets")
 }
 

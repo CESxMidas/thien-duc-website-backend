@@ -69,8 +69,8 @@ describe('NewsService — chuyên mục', () => {
       newsPost: {
         groupBy: jest
           .fn()
-          .mockImplementation((args: { where?: unknown }) =>
-            Promise.resolve(args.where ? visibleRows : totalRows),
+          .mockImplementation((args: { where?: { OR?: unknown } }) =>
+            Promise.resolve(args.where?.OR ? visibleRows : totalRows),
           ),
         count: jest.fn(),
       },
@@ -181,11 +181,12 @@ describe('NewsService — chuyên mục', () => {
       await service.findAllCategories();
 
       const withWhere = prisma.newsPost.groupBy.mock.calls
-        .map(([args]) => args as { where?: unknown })
-        .filter((args) => args.where);
+        .map(([args]) => args as { where?: { OR?: unknown } })
+        .filter((args) => args.where?.OR);
 
       expect(withWhere).toHaveLength(1);
       expect(withWhere[0].where).toEqual({
+        deletedAt: null,
         OR: [
           { status: ContentStatus.PUBLISHED },
           {
@@ -200,8 +201,8 @@ describe('NewsService — chuyên mục', () => {
       await service.findAllCategories(true);
 
       const withoutWhere = prisma.newsPost.groupBy.mock.calls
-        .map(([args]) => args as { where?: unknown })
-        .filter((args) => !args.where);
+        .map(([args]) => args as { where?: { OR?: unknown } })
+        .filter((args) => !args.where?.OR);
 
       expect(withoutWhere).toHaveLength(1);
     });
@@ -219,7 +220,7 @@ describe('NewsService — chuyên mục', () => {
       prisma.newsPost.groupBy.mockImplementation(
         (args: { where?: Record<string, unknown> }) =>
           Promise.resolve(
-            args.where
+            args.where?.OR
               ? // Điều kiện thật của Prisma sẽ loại B và D; mock phản ánh kết quả đó.
                 [{ categoryId: 'c1', _count: { _all: 2 } }]
               : [{ categoryId: 'c1', _count: { _all: 4 } }],
@@ -237,7 +238,7 @@ describe('NewsService — chuyên mục', () => {
 
       const publicCounts = prisma.newsPost.groupBy.mock.calls
         .map(([args]) => args as { where?: { OR?: unknown } })
-        .filter((args) => args.where);
+        .filter((args) => args.where?.OR);
 
       // "Đang hiện trên website" phải là cùng một câu trả lời dù ai hỏi.
       expect(publicCounts[0].where?.OR).toBeDefined();

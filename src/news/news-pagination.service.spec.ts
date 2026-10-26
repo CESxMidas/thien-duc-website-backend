@@ -106,8 +106,14 @@ describe('NewsService.findAllPaginated', () => {
     await service.findAllPaginated(1, 9);
     const { countArgs, findArgs } = queries();
 
-    expect(countArgs.where).toEqual(publiclyVisible(NOW));
-    expect(findArgs.where).toEqual(publiclyVisible(NOW));
+    expect(countArgs.where).toEqual({
+      ...publiclyVisible(NOW),
+      deletedAt: null,
+    });
+    expect(findArgs.where).toEqual({
+      ...publiclyVisible(NOW),
+      deletedAt: null,
+    });
     expect(findArgs.orderBy).toEqual([
       { order: 'asc' },
       { createdAt: 'desc' },
@@ -287,7 +293,7 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
       { where: unknown; orderBy: unknown },
     ];
 
-    expect(args.where).toEqual(publiclyVisible(NOW));
+    expect(args.where).toEqual({ ...publiclyVisible(NOW), deletedAt: null });
     expect(args.orderBy).toEqual([
       { order: 'asc' },
       { createdAt: 'desc' },
@@ -306,7 +312,7 @@ describe('NewsService.findAll (danh sách phẳng, giữ tương thích)', () =>
       { where: unknown; orderBy: unknown },
     ];
 
-    expect(args.where).toBeUndefined();
+    expect(args.where).toEqual({ deletedAt: null });
     expect(args.orderBy).toEqual([
       { order: 'asc' },
       { createdAt: 'desc' },

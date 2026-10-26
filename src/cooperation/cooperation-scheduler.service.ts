@@ -134,6 +134,7 @@ export class CooperationSchedulerService {
           "scheduled_at" = NULL,
           "updated_at" = (NOW() AT TIME ZONE 'utc')
       WHERE "content_status" = 'PENDING'::"ContentStatus"
+        AND "deleted_at" IS NULL
         AND "scheduled_at" IS NOT NULL
         AND "scheduled_at" <= (NOW() AT TIME ZONE 'utc')
       RETURNING "id"

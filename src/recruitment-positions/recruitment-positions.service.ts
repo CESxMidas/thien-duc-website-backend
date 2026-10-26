@@ -56,6 +56,7 @@ export class RecruitmentPositionsService {
   async findAllPublic(now = new Date()) {
     const positions = await this.prisma.recruitmentPosition.findMany({
       where: {
+        deletedAt: null,
         status: ContentStatus.PUBLISHED,
         OR: [{ deadline: null }, { deadline: { gte: vietnameseToday(now) } }],
       },
@@ -66,6 +67,7 @@ export class RecruitmentPositionsService {
 
   async findAllForAdmin() {
     const positions = await this.prisma.recruitmentPosition.findMany({
+      where: { deletedAt: null },
       orderBy: [...CONTENT_ORDER],
     });
     return positions.map(serializeDeadline);
@@ -73,7 +75,7 @@ export class RecruitmentPositionsService {
 
   async findOneForAdmin(id: string) {
     const position = await this.prisma.recruitmentPosition.findUnique({
-      where: { id },
+      where: { deletedAt: null, id },
     });
     if (!position) {
       throw new NotFoundException('Không tìm thấy vị trí tuyển dụng');
@@ -173,10 +175,17 @@ export class RecruitmentPositionsService {
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, actorId?: string) {
     await this.findOneForAdmin(id);
-    await this.prisma.recruitmentPosition.delete({ where: { id } });
-    return { deleted: true };
+    await this.prisma.recruitmentPosition.update({
+      where: { id, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: actorId ?? null,
+        status: ContentStatus.DRAFT,
+      },
+    });
+    return { trashed: true };
   }
 
   private assertEditorCanOnlyCreateDraft(

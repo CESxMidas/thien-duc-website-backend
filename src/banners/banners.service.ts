@@ -44,13 +44,18 @@ export class BannersService {
       // hiển thị ổn định giữa các lần gọi, tránh banner nhảy chỗ trên trang chủ.
       // Cửa sổ hiển thị chỉ LOẠI BỎ hàng, không đụng tới `order`: banner còn lại
       // giữ nguyên thứ tự tương đối như trước Batch 12.
-      where: activeOnly ? bannerPubliclyVisibleWhere(now) : undefined,
+      where: {
+        ...(activeOnly ? bannerPubliclyVisibleWhere(now) : undefined),
+        deletedAt: null,
+      },
       orderBy: [...CONTENT_ORDER],
     });
   }
 
   async findOne(id: string) {
-    const banner = await this.prisma.banner.findUnique({ where: { id } });
+    const banner = await this.prisma.banner.findUnique({
+      where: { deletedAt: null, id },
+    });
     if (!banner) throw new NotFoundException('Không tìm thấy banner');
     return banner;
   }
@@ -123,7 +128,9 @@ export class BannersService {
    * luồng duyệt/đăng của nội dung, nơi trạng thái xuất bản mới chi phối thao tác.
    */
   async reorder(bannerIds: string[]) {
-    const total = await this.prisma.banner.count();
+    const total = await this.prisma.banner.count({
+      where: { deletedAt: null },
+    });
     const unique = new Set(bannerIds);
 
     if (unique.size !== bannerIds.length) {
@@ -136,7 +143,7 @@ export class BannersService {
     }
 
     const found = await this.prisma.banner.count({
-      where: { id: { in: bannerIds } },
+      where: { deletedAt: null, id: { in: bannerIds } },
     });
     if (found !== bannerIds.length) {
       throw new BadRequestException('Có id banner không tồn tại');

@@ -100,6 +100,7 @@ export class NewsSchedulerService {
           "scheduled_at" = NULL,
           "updated_at" = (NOW() AT TIME ZONE 'utc')
       WHERE "status" = 'PENDING'::"ContentStatus"
+        AND "deleted_at" IS NULL
         AND "scheduled_at" IS NOT NULL
         AND "scheduled_at" <= (NOW() AT TIME ZONE 'utc')
       RETURNING "id", "slug"

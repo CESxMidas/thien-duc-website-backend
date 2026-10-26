@@ -247,6 +247,7 @@ describe('BannersService — cửa sổ hiển thị', () => {
     it('công khai: lọc theo isActive VÀ cửa sổ, tại đúng `now` được truyền', async () => {
       await service.findAll(true, NOW);
       expect(findManyArgs().where).toEqual({
+        deletedAt: null,
         isActive: true,
         AND: [
           { OR: [{ displayFrom: null }, { displayFrom: { lte: NOW } }] },
@@ -266,7 +267,9 @@ describe('BannersService — cửa sổ hiển thị', () => {
 
     it('Admin: KHÔNG lọc gì cả — banner tắt, chưa tới hạn, hết hạn đều hiện', async () => {
       await service.findAll(false, NOW);
-      expect(findManyArgs().where).toBeUndefined();
+      expect(findManyArgs().where).toEqual({
+        deletedAt: null,
+      });
     });
 
     it('không truyền `now`: vẫn dựng vị từ, mốc lấy quanh thời điểm gọi', async () => {

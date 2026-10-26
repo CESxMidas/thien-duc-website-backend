@@ -69,7 +69,9 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { deletedAt: null, email },
+    });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
@@ -151,8 +153,14 @@ export class AuthService {
   /** Hồ sơ tài khoản đang đăng nhập. Không bao giờ trả `passwordHash`. */
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, role: true },
+      where: { deletedAt: null, id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        canDeleteCms: true,
+      },
     });
     // Token còn hạn nhưng user đã bị xóa khỏi DB.
     if (!user) {
@@ -258,7 +266,7 @@ export class AuthService {
         where: { tokenHash },
       });
       const user = await tx.user.findUnique({
-        where: { id: invitation.userId },
+        where: { deletedAt: null, id: invitation.userId },
       });
       if (!user || !user.isActive || user.setupCompletedAt !== null) {
         // Ném lỗi ở đây khiến toàn bộ transaction rollback — kể cả bước
@@ -306,7 +314,9 @@ export class AuthService {
    * lập phải đi qua luồng lời mời, không phải luồng này.
    */
   async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { deletedAt: null, email },
+    });
 
     // Mọi điều kiện không đủ đều dẫn tới CÙNG một nhánh "không làm gì" nhưng
     // vẫn trả thông báo trung tính bên dưới — không phân biệt lý do ra ngoài.
@@ -447,7 +457,9 @@ export class AuthService {
         where: { tokenHash },
         select: { id: true, userId: true },
       });
-      const user = await tx.user.findUnique({ where: { id: record.userId } });
+      const user = await tx.user.findUnique({
+        where: { deletedAt: null, id: record.userId },
+      });
       if (!user || !user.isActive || user.setupCompletedAt === null) {
         // Ném lỗi ở đây khiến toàn bộ transaction rollback — kể cả bước claim
         // — nên token không bị "đốt" vô ích nếu tài khoản tạm thời không đủ
@@ -524,7 +536,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { deletedAt: null, id: userId },
       select: {
         id: true,
         passwordHash: true,

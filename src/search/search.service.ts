@@ -53,7 +53,7 @@ export class SearchService {
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT p."id"
       FROM "projects" p, plainto_tsquery('simple', public.immutable_unaccent(${q})) AS query
-      WHERE ${projectPubliclyVisibleSql(now)}
+      WHERE p."deleted_at" IS NULL AND ${projectPubliclyVisibleSql(now)}
         AND project_search_document(
               p."title", p."summary", p."description", p."category", p."location"
             ) @@ query
@@ -69,10 +69,26 @@ export class SearchService {
     if (ranked.length === 0) return [];
 
     const projects = await this.prisma.project.findMany({
-      where: { id: { in: ranked.map((row) => row.id) } },
+      where: { deletedAt: null, id: { in: ranked.map((row) => row.id) } },
       include: {
-        items: { orderBy: { order: 'asc' } },
-        _count: { select: { galleryImages: true } },
+        items: {
+          where: { deletedAt: null, isActive: true },
+          orderBy: { order: 'asc' },
+        },
+        _count: {
+          select: {
+            galleryImages: {
+              where: {
+                deletedAt: null,
+                isActive: true,
+                OR: [
+                  { projectItemId: null },
+                  { projectItem: { deletedAt: null } },
+                ],
+              },
+            },
+          },
+        },
       },
     });
     return sortByRankedIds(projects, ranked);
@@ -89,7 +105,7 @@ export class SearchService {
     const ranked = await this.prisma.$queryRaw<RankedRow[]>`
       SELECT n."id"
       FROM "news_posts" n, plainto_tsquery('simple', public.immutable_unaccent(${q})) AS query
-      WHERE ${newsPubliclyVisibleSql(now)}
+      WHERE n."deleted_at" IS NULL AND ${newsPubliclyVisibleSql(now)}
         AND news_search_document(n."title", n."summary", n."content", n."author") @@ query
       ORDER BY ts_rank(
                  news_search_document(n."title", n."summary", n."content", n."author"),
@@ -101,8 +117,8 @@ export class SearchService {
     if (ranked.length === 0) return [];
 
     const posts = await this.prisma.newsPost.findMany({
-      where: { id: { in: ranked.map((row) => row.id) } },
-      include: { category: true },
+      where: { deletedAt: null, id: { in: ranked.map((row) => row.id) } },
+      include: { category: { where: { deletedAt: null } } },
     });
     return sortByRankedIds(posts, ranked);
   }

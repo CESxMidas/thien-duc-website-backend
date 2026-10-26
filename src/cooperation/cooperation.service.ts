@@ -53,9 +53,12 @@ export class CooperationService {
    */
   findAll(publishedOnly = false) {
     return this.prisma.cooperationProject.findMany({
-      where: publishedOnly
-        ? cooperationPubliclyVisibleWhere(new Date())
-        : undefined,
+      where: {
+        ...(publishedOnly
+          ? cooperationPubliclyVisibleWhere(new Date())
+          : undefined),
+        deletedAt: null,
+      },
       orderBy: [...CONTENT_ORDER],
     });
   }
@@ -67,7 +70,7 @@ export class CooperationService {
    */
   async findOne(id: string) {
     const project = await this.prisma.cooperationProject.findUnique({
-      where: { id },
+      where: { deletedAt: null, id },
     });
     if (!project) throw new NotFoundException('Không tìm thấy dự án hợp tác');
     return project;
@@ -346,7 +349,9 @@ export class CooperationService {
    * id), rồi mới vào transaction. Từ chối là không ghi một dòng nào.
    */
   async reorder(ids: string[], actorRole?: string) {
-    const total = await this.prisma.cooperationProject.count();
+    const total = await this.prisma.cooperationProject.count({
+      where: { deletedAt: null },
+    });
     const unique = new Set(ids);
 
     if (unique.size !== ids.length) {
@@ -359,7 +364,7 @@ export class CooperationService {
     }
 
     const affected = await this.prisma.cooperationProject.findMany({
-      where: { id: { in: ids } },
+      where: { deletedAt: null, id: { in: ids } },
       select: { contentStatus: true, scheduledAt: true, publishedAt: true },
     });
     if (affected.length !== ids.length) {

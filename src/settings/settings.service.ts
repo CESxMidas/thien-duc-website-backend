@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateBrandingSettingsDto } from './dto/update-branding-settings.dto';
+import { UpdateCompanyContactDto } from './dto/update-company-contact.dto';
+import { CompanyContact, DEFAULT_COMPANY_CONTACT } from './company-contact';
 
 export type BrandingSettings = {
   logoUrl: string | null;
@@ -52,6 +54,35 @@ function parseBranding(
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getCompanyContact(): Promise<CompanyContact> {
+    const setting = await this.prisma.siteSetting.findUnique({
+      where: { key: 'company-contact' },
+    });
+    return setting
+      ? (setting.value as CompanyContact)
+      : structuredClone(DEFAULT_COMPANY_CONTACT);
+  }
+
+  async updateCompanyContact(
+    dto: UpdateCompanyContactDto,
+  ): Promise<CompanyContact> {
+    const next: CompanyContact = {
+      phone: dto.phone.trim(),
+      email: dto.email.trim(),
+      taxCode: dto.taxCode.trim(),
+      address: {
+        vi: dto.address.vi.trim(),
+        ...(dto.address.en?.trim() ? { en: dto.address.en.trim() } : {}),
+      },
+    };
+    await this.prisma.siteSetting.upsert({
+      where: { key: 'company-contact' },
+      create: { key: 'company-contact', value: next },
+      update: { value: next },
+    });
+    return next;
+  }
 
   async getBranding(): Promise<BrandingSettings> {
     const setting = await this.prisma.siteSetting.findUnique({

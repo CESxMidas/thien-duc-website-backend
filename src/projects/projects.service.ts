@@ -102,16 +102,34 @@ export class ProjectsService {
    */
   findAll(publishedOnly = false) {
     return this.prisma.project.findMany({
-      where: publishedOnly
-        ? projectPubliclyVisibleWhere(new Date())
-        : undefined,
+      where: {
+        ...(publishedOnly
+          ? projectPubliclyVisibleWhere(new Date())
+          : undefined),
+        deletedAt: null,
+      },
       orderBy: [...CONTENT_ORDER],
       include: {
         items: {
-          where: publishedOnly ? { isActive: true } : undefined,
+          where: {
+            deletedAt: null,
+            ...(publishedOnly ? { isActive: true } : {}),
+          },
           orderBy: BY_ORDER,
         },
-        _count: { select: { galleryImages: true } },
+        _count: {
+          select: {
+            galleryImages: {
+              where: {
+                deletedAt: null,
+                OR: [
+                  { projectItemId: null },
+                  { projectItem: { deletedAt: null } },
+                ],
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -127,14 +145,21 @@ export class ProjectsService {
    */
   async findBySlug(slug: string, publishedOnly = false) {
     const project = await this.prisma.project.findUnique({
-      where: { slug },
+      where: { deletedAt: null, slug },
       include: {
         items: {
-          where: publishedOnly ? { isActive: true } : undefined,
+          where: {
+            deletedAt: null,
+            ...(publishedOnly ? { isActive: true } : {}),
+          },
           orderBy: BY_ORDER,
         },
         galleryImages: {
-          where: publishedOnly ? { isActive: true } : undefined,
+          where: {
+            deletedAt: null,
+            OR: [{ projectItemId: null }, { projectItem: { deletedAt: null } }],
+            ...(publishedOnly ? { isActive: true } : {}),
+          },
           orderBy: BY_ORDER,
         },
       },
@@ -178,13 +203,18 @@ export class ProjectsService {
     const project = await this.findBySlug(projectSlug, publishedOnly);
     const item = await this.prisma.projectItem.findFirst({
       where: {
+        deletedAt: null,
         projectId: project.id,
         slug: itemSlug,
         ...(publishedOnly ? { isActive: true } : {}),
       },
       include: {
         galleryImages: {
-          where: publishedOnly ? { isActive: true } : undefined,
+          where: {
+            deletedAt: null,
+            OR: [{ projectItemId: null }, { projectItem: { deletedAt: null } }],
+            ...(publishedOnly ? { isActive: true } : {}),
+          },
           orderBy: BY_ORDER,
         },
       },
@@ -568,6 +598,8 @@ export class ProjectsService {
     const project = await this.findBySlug(projectSlug, publishedOnly);
     return this.prisma.projectGalleryImage.findMany({
       where: {
+        deletedAt: null,
+        OR: [{ projectItemId: null }, { projectItem: { deletedAt: null } }],
         projectId: project.id,
         ...(publishedOnly ? { isActive: true } : {}),
       },
@@ -665,7 +697,7 @@ export class ProjectsService {
     // trước. Nên nó chịu cùng luật với thêm/sửa/xóa ảnh.
     this.assertChildEditAllowed(project, actorRole);
     const owned = await this.prisma.projectGalleryImage.findMany({
-      where: { projectId: project.id },
+      where: { deletedAt: null, projectId: project.id },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((image) => image.id));
@@ -702,7 +734,7 @@ export class ProjectsService {
   private async findGalleryImage(projectSlug: string, imageId: string) {
     const project = await this.findBySlug(projectSlug);
     const image = await this.prisma.projectGalleryImage.findFirst({
-      where: { id: imageId, projectId: project.id },
+      where: { deletedAt: null, id: imageId, projectId: project.id },
     });
     if (!image) throw new NotFoundException('Không tìm thấy ảnh trong dự án');
     return { project, image };
@@ -710,7 +742,7 @@ export class ProjectsService {
 
   private async nextGalleryOrder(projectId: string): Promise<number> {
     const last = await this.prisma.projectGalleryImage.findFirst({
-      where: { projectId },
+      where: { deletedAt: null, projectId },
       orderBy: { order: 'desc' },
       select: { order: true },
     });

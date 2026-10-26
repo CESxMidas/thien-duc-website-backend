@@ -59,7 +59,7 @@ describe('Thứ tự nội dung', () => {
       projectId: 'parent',
     });
     expect(table.findMany).toHaveBeenCalledWith({
-      where: { projectId: 'parent' },
+      where: { projectId: 'parent', deletedAt: null },
       select: { id: true },
     });
     expect(table.updateMany).toHaveBeenCalledWith({

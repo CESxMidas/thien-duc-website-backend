@@ -328,7 +328,7 @@ describe('CooperationService', () => {
       const [{ where }] = prisma.cooperationProject.findMany.mock.calls[0] as [
         { where?: unknown },
       ];
-      expect(where).toBeUndefined();
+      expect(where).toEqual({ deletedAt: null });
     });
   });
 });

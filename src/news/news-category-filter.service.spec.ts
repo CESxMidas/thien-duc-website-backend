@@ -76,8 +76,14 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
     await service.findAllPaginated(1, 9);
     const { countArgs, findArgs } = queries();
 
-    expect(countArgs.where).toEqual(publiclyVisible(NOW));
-    expect(findArgs.where).toEqual(publiclyVisible(NOW));
+    expect(countArgs.where).toEqual({
+      ...publiclyVisible(NOW),
+      deletedAt: null,
+    });
+    expect(findArgs.where).toEqual({
+      ...publiclyVisible(NOW),
+      deletedAt: null,
+    });
   });
 
   it('có categorySlug: lọc THÊM chuyên mục, KHÔNG bỏ điều kiện PUBLISHED', async () => {
@@ -91,8 +97,8 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
       ...publiclyVisible(NOW),
       category: { slug: 'tin-du-an', isActive: true },
     };
-    expect(countArgs.where).toEqual(expected);
-    expect(findArgs.where).toEqual(expected);
+    expect(countArgs.where).toEqual({ ...expected, deletedAt: null });
+    expect(findArgs.where).toEqual({ ...expected, deletedAt: null });
   });
 
   it('đếm và lấy trang dùng CÙNG một điều kiện lọc', async () => {
@@ -172,6 +178,9 @@ describe('NewsService.findAllPaginated — lọc theo chuyên mục', () => {
 
     // `?categorySlug=` rỗng phải trả về danh sách đầy đủ, không phải khớp một
     // chuyên mục có slug là chuỗi rỗng (không bao giờ tồn tại → luôn rỗng).
-    expect(findArgs.where).toEqual(publiclyVisible(NOW));
+    expect(findArgs.where).toEqual({
+      ...publiclyVisible(NOW),
+      deletedAt: null,
+    });
   });
 });

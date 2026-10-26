@@ -163,14 +163,17 @@ describe('Hiển thị công khai của dự án hợp tác', () => {
       await service.findAll(true);
 
       const [{ where }] = findMany.mock.calls[0] as [{ where: unknown }];
-      expect(where).toEqual(cooperationPubliclyVisibleWhere(NOW));
+      expect(where).toEqual({
+        ...cooperationPubliclyVisibleWhere(NOW),
+        deletedAt: null,
+      });
     });
 
     it('danh sách Admin vẫn thấy mọi trạng thái', async () => {
       await service.findAll(false);
 
       const [{ where }] = findMany.mock.calls[0] as [{ where?: unknown }];
-      expect(where).toBeUndefined();
+      expect(where).toEqual({ deletedAt: null });
     });
 
     /** Thứ tự hiển thị không được đổi vì batch này — vẫn `order` rồi `createdAt`. */

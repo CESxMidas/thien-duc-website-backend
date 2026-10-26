@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -42,6 +43,7 @@ const PUBLIC_FIELDS = {
   email: true,
   name: true,
   role: true,
+  canDeleteCms: true,
   isActive: true,
   // NULL = tài khoản do lời mời tạo ra, chưa tự đặt mật khẩu (Admin hiển thị
   // "Chờ thiết lập"). An toàn để lộ: chỉ là mốc thời gian trạng thái, không
@@ -106,6 +108,7 @@ export class UsersService {
 
   findAll() {
     return this.prisma.user.findMany({
+      where: { deletedAt: null },
       select: PUBLIC_FIELDS,
       orderBy: { createdAt: 'desc' },
     });
@@ -113,7 +116,7 @@ export class UsersService {
 
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id },
+      where: { deletedAt: null, id },
       select: DETAIL_FIELDS,
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
@@ -210,7 +213,9 @@ export class UsersService {
 
   /** Gửi lại lời mời — thu hồi lời mời cũ còn hiệu lực và tạo lời mời mới. */
   async resendInvitation(id: string, actorId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { deletedAt: null, id },
+    });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     if (user.setupCompletedAt !== null) {
       throw new BadRequestException('Tài khoản đã hoàn tất thiết lập');
@@ -270,7 +275,9 @@ export class UsersService {
    * `isActive`, `role`, `passwordHash`, `setupCompletedAt`.
    */
   async revokeInvitation(id: string, actorId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { deletedAt: null, id },
+    });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
     if (user.setupCompletedAt !== null) {
       throw new BadRequestException(
@@ -296,6 +303,29 @@ export class UsersService {
    * Cập nhật tài khoản. `actorId` là người đang thao tác — dùng để chặn tự hạ
    * quyền / tự khóa chính mình, tránh tự nhốt mình ra khỏi hệ thống.
    */
+  async updateDeletePermissions(
+    id: string,
+    canDeleteCms: boolean,
+    actorId: string,
+  ) {
+    const actor = await this.prisma.user.findUnique({
+      where: { deletedAt: null, id: actorId },
+      select: { role: true, isActive: true },
+    });
+    if (!actor?.isActive || actor.role !== Role.SUPER_ADMIN)
+      throw new ForbiddenException(
+        'Chỉ Super Admin được cấp hoặc thu hồi quyền xóa.',
+      );
+    const target = await this.findOne(id);
+    if (target.role === Role.SUPER_ADMIN)
+      throw new BadRequestException('Super Admin đã có toàn bộ quyền xóa.');
+    return this.prisma.user.update({
+      where: { id },
+      data: { canDeleteCms },
+      select: DETAIL_FIELDS,
+    });
+  }
+
   async update(id: string, dto: UpdateUserDto, actorId: string) {
     const target = await this.findOne(id);
     const isSelf = id === actorId;
@@ -379,7 +409,12 @@ export class UsersService {
   /** Ném lỗi nếu `id` là Super Admin đang hoạt động duy nhất còn lại. */
   private async assertNotLastSuperAdmin(id: string) {
     const remaining = await this.prisma.user.count({
-      where: { role: Role.SUPER_ADMIN, isActive: true, id: { not: id } },
+      where: {
+        deletedAt: null,
+        role: Role.SUPER_ADMIN,
+        isActive: true,
+        id: { not: id },
+      },
     });
     if (remaining === 0) {
       throw new BadRequestException(
@@ -395,13 +430,13 @@ export class UsersService {
   /** Hồ sơ của người đang đăng nhập, kèm yêu cầu cập nhật đang chờ (nếu có). */
   async getMyProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { deletedAt: null, id: userId },
       select: PROFILE_FIELDS,
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
 
     const pendingRequest = await this.prisma.profileChangeRequest.findFirst({
-      where: { userId, status: ProfileChangeStatus.PENDING },
+      where: { userId, status: ProfileChangeStatus.PENDING, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -415,7 +450,7 @@ export class UsersService {
    */
   async submitProfileChange(userId: string, dto: UpdateProfileDto, role: Role) {
     const current = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { deletedAt: null, id: userId },
       select: PROFILE_FIELDS,
     });
     if (!current) throw new NotFoundException('Không tìm thấy người dùng');
@@ -459,7 +494,7 @@ export class UsersService {
 
     // EDITOR: mỗi người chỉ giữ một yêu cầu PENDING — có sẵn thì ghi đè.
     const existing = await this.prisma.profileChangeRequest.findFirst({
-      where: { userId, status: ProfileChangeStatus.PENDING },
+      where: { userId, status: ProfileChangeStatus.PENDING, deletedAt: null },
     });
     const pendingRequest = existing
       ? await this.prisma.profileChangeRequest.update({
@@ -476,7 +511,7 @@ export class UsersService {
   /** Danh sách yêu cầu cập nhật hồ sơ cho ADMIN/SUPER_ADMIN duyệt. */
   listProfileRequests(status?: ProfileChangeStatus) {
     return this.prisma.profileChangeRequest.findMany({
-      where: status ? { status } : undefined,
+      where: { ...(status ? { status } : {}), deletedAt: null },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       include: {
         user: {
@@ -500,7 +535,7 @@ export class UsersService {
     reviewerId: string,
   ) {
     const request = await this.prisma.profileChangeRequest.findUnique({
-      where: { id },
+      where: { id, deletedAt: null },
     });
     if (!request) throw new NotFoundException('Không tìm thấy yêu cầu');
     if (request.status !== ProfileChangeStatus.PENDING) {

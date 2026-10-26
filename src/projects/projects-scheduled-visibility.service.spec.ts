@@ -164,7 +164,10 @@ describe('ProjectsService — route công khai theo lịch', () => {
       const [{ where }] = prisma.project.findMany.mock.calls[0] as [
         { where?: Prisma.ProjectWhereInput },
       ];
-      expect(where).toEqual(projectPubliclyVisibleWhere(NOW));
+      expect(where).toEqual({
+        ...projectPubliclyVisibleWhere(NOW),
+        deletedAt: null,
+      });
     });
 
     it('route Admin vẫn thấy MỌI trạng thái', async () => {
@@ -173,7 +176,7 @@ describe('ProjectsService — route công khai theo lịch', () => {
       const [{ where }] = prisma.project.findMany.mock.calls[0] as [
         { where?: unknown },
       ];
-      expect(where).toBeUndefined();
+      expect(where).toEqual({ deletedAt: null });
     });
   });
 

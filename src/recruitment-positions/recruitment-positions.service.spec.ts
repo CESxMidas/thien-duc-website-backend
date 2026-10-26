@@ -67,6 +67,7 @@ describe('RecruitmentPositionsService', () => {
 
     expect(prisma.recruitmentPosition.findMany).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         status: ContentStatus.PUBLISHED,
         OR: [
           { deadline: null },
@@ -85,6 +86,7 @@ describe('RecruitmentPositionsService', () => {
 
     expect(prisma.recruitmentPosition.findMany).toHaveBeenCalledWith({
       where: {
+        deletedAt: null,
         status: ContentStatus.PUBLISHED,
         OR: [
           { deadline: null },
@@ -103,6 +105,7 @@ describe('RecruitmentPositionsService', () => {
     const result = await service.findAllForAdmin();
 
     expect(prisma.recruitmentPosition.findMany).toHaveBeenCalledWith({
+      where: { deletedAt: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }, { id: 'desc' }],
     });
     expect(result[0]).toMatchObject({
@@ -238,10 +241,14 @@ describe('RecruitmentPositionsService', () => {
     prisma.recruitmentPosition.delete.mockResolvedValue(position());
 
     await expect(service.remove('position-id')).resolves.toEqual({
-      deleted: true,
+      trashed: true,
     });
-    expect(prisma.recruitmentPosition.delete).toHaveBeenCalledWith({
-      where: { id: 'position-id' },
+    expect(prisma.recruitmentPosition.update).toHaveBeenCalledWith({
+      where: { id: 'position-id', deletedAt: null },
+      data: expect.objectContaining({
+        deletedBy: null,
+        status: ContentStatus.DRAFT,
+      }) as unknown,
     });
   });
 

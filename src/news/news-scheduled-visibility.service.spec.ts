@@ -80,6 +80,7 @@ describe('NewsService — hiển thị công khai của bài lên lịch', () =>
       await service.findAll(true);
 
       expect(listWhere()).toEqual({
+        deletedAt: null,
         OR: [
           { status: ContentStatus.PUBLISHED },
           {
@@ -96,7 +97,7 @@ describe('NewsService — hiển thị công khai của bài lên lịch', () =>
       const [args] = prisma.newsPost.findMany.mock.calls[0] as [
         { where?: unknown },
       ];
-      expect(args.where).toBeUndefined();
+      expect(args.where).toEqual({ deletedAt: null });
     });
   });
 

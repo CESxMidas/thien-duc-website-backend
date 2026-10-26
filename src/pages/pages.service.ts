@@ -68,7 +68,10 @@ export class PagesService {
    */
   findAll(publishedOnly = false) {
     return this.prisma.page.findMany({
-      where: publishedOnly ? pagePubliclyVisibleWhere(new Date()) : undefined,
+      where: {
+        ...(publishedOnly ? pagePubliclyVisibleWhere(new Date()) : undefined),
+        deletedAt: null,
+      },
       orderBy: { slug: 'asc' },
     });
   }
@@ -82,7 +85,9 @@ export class PagesService {
    * không được phân biệt "không tồn tại" với "sắp công khai".
    */
   async findBySlug(slug: string, publishedOnly = false) {
-    const page = await this.prisma.page.findUnique({ where: { slug } });
+    const page = await this.prisma.page.findUnique({
+      where: { deletedAt: null, slug },
+    });
     if (!page || (publishedOnly && !isPubliclyVisible(page, new Date()))) {
       throw new NotFoundException('Không tìm thấy trang');
     }

@@ -19,6 +19,7 @@ export class MediaService {
   findAll(folder?: string, includeInactive = false) {
     return this.prisma.mediaAsset.findMany({
       where: {
+        deletedAt: null,
         ...(includeInactive ? {} : { isActive: true }),
         ...(folder ? { folder: { startsWith: folder } } : {}),
       },
@@ -27,7 +28,9 @@ export class MediaService {
   }
 
   async findOne(id: string) {
-    const asset = await this.prisma.mediaAsset.findUnique({ where: { id } });
+    const asset = await this.prisma.mediaAsset.findUnique({
+      where: { deletedAt: null, id },
+    });
     if (!asset) throw new NotFoundException('Không tìm thấy tệp tin');
     return asset;
   }

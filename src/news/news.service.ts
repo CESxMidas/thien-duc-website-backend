@@ -107,9 +107,12 @@ export class NewsService {
    */
   findAll(publishedOnly = false) {
     const posts = this.prisma.newsPost.findMany({
-      where: publishedOnly ? publiclyVisibleWhere(new Date()) : undefined,
+      where: {
+        ...(publishedOnly ? publiclyVisibleWhere(new Date()) : undefined),
+        deletedAt: null,
+      },
       orderBy: this.listOrderBy(),
-      include: { category: true },
+      include: { category: { where: { deletedAt: null } } },
     });
 
     return publishedOnly
@@ -141,11 +144,11 @@ export class NewsService {
     };
 
     const [totalItems, allItems] = await this.prisma.$transaction([
-      this.prisma.newsPost.count({ where }),
+      this.prisma.newsPost.count({ where: { ...where, deletedAt: null } }),
       this.prisma.newsPost.findMany({
-        where,
+        where: { ...where, deletedAt: null },
         orderBy: this.listOrderBy(),
-        include: { category: true },
+        include: { category: { where: { deletedAt: null } } },
       }),
     ]);
 
@@ -190,8 +193,8 @@ export class NewsService {
    */
   async findBySlug(slug: string, publishedOnly = false) {
     const post = await this.prisma.newsPost.findUnique({
-      where: { slug },
-      include: { category: true },
+      where: { deletedAt: null, slug },
+      include: { category: { where: { deletedAt: null } } },
     });
     if (!post || (publishedOnly && !isPubliclyVisible(post, new Date()))) {
       throw new NotFoundException('Không tìm thấy bài viết');
@@ -466,12 +469,13 @@ export class NewsService {
   private async countPostsByCategory(now: Date) {
     const [totalRows, visibleRows] = await Promise.all([
       this.prisma.newsPost.groupBy({
+        where: { deletedAt: null },
         by: ['categoryId'],
         _count: { _all: true },
       }),
       this.prisma.newsPost.groupBy({
         by: ['categoryId'],
-        where: publiclyVisibleWhere(now),
+        where: { ...publiclyVisibleWhere(now), deletedAt: null },
         _count: { _all: true },
       }),
     ]);
@@ -514,7 +518,10 @@ export class NewsService {
   async findAllCategories(includeTotal = false) {
     const [categories, counts] = await Promise.all([
       this.prisma.newsCategory.findMany({
-        where: includeTotal ? undefined : { isActive: true },
+        where: {
+          ...(includeTotal ? undefined : { isActive: true }),
+          deletedAt: null,
+        },
         orderBy: [{ order: 'asc' }, { slug: 'asc' }],
       }),
       this.countPostsByCategory(new Date()),
@@ -548,7 +555,7 @@ export class NewsService {
 
   async findCategoryBySlug(slug: string) {
     const category = await this.prisma.newsCategory.findUnique({
-      where: { slug },
+      where: { deletedAt: null, slug },
     });
     if (!category) throw new NotFoundException('Không tìm thấy chuyên mục');
     return category;

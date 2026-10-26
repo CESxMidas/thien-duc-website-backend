@@ -131,15 +131,18 @@ export class RecruitmentPositionsController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Xóa vị trí tuyển dụng.' })
+  @ApiOperation({
+    summary:
+      'Chuyển vị trí tuyển dụng vào thùng rác (endpoint cũ, chỉ Super Admin).',
+  })
   @ApiResponse({
     status: 404,
     description: 'Không tìm thấy vị trí tuyển dụng.',
   })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN)
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.recruitmentPositionsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() actor: { id: string }) {
+    return this.recruitmentPositionsService.remove(id, actor.id);
   }
 }

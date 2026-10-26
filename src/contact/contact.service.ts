@@ -36,13 +36,14 @@ export class ContactService {
 
   findAll() {
     return this.prisma.contactSubmission.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findOne(id: string) {
     const submission = await this.prisma.contactSubmission.findUnique({
-      where: { id },
+      where: { deletedAt: null, id },
     });
     if (!submission)
       throw new NotFoundException('Không tìm thấy yêu cầu liên hệ');

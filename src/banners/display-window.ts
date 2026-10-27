@@ -117,7 +117,7 @@ export function assertDisplayWindow(window: DisplayWindow): void {
 
   if (displayFrom.getTime() >= displayUntil.getTime()) {
     throw new BadRequestException(
-      '“Hiển thị đến” phải sau “Hiển thị từ”. Hãy kiểm tra lại hai mốc thời gian.',
+      'Hiển thị đến phải sau Hiển thị từ. Hãy kiểm tra lại hai mốc thời gian.',
     );
   }
 }

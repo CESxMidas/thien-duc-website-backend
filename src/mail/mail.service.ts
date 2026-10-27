@@ -522,7 +522,7 @@ export class MailService implements OnModuleInit {
       )} giờ VN).`,
       'Vì lý do an toàn, vui lòng KHÔNG chuyển tiếp email hay liên kết này cho người khác.',
       '',
-      'Nếu bạn KHÔNG yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này — mật khẩu hiện tại của bạn vẫn giữ nguyên.',
+      'Nếu bạn KHÔNG yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn vẫn giữ nguyên.',
     ].join('\n');
   }
 
@@ -538,7 +538,7 @@ export class MailService implements OnModuleInit {
       `<p style="color:#59646a">Liên kết này chỉ dùng được <strong>một lần</strong> và sẽ hết hạn sau <strong>20 phút</strong> (vào lúc ${VN_DATETIME.format(
         data.expiresAt,
       )} giờ VN). Vì lý do an toàn, vui lòng <strong>không chuyển tiếp</strong> email hay liên kết này cho người khác.</p>`,
-      '<p style="color:#59646a">Nếu bạn <strong>không</strong> yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này — mật khẩu hiện tại của bạn vẫn giữ nguyên.</p>',
+      '<p style="color:#59646a">Nếu bạn <strong>không</strong> yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn vẫn giữ nguyên.</p>',
       '</div>',
     ].join('');
   }

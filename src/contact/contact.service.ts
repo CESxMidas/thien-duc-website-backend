@@ -38,12 +38,14 @@ export class ContactService {
     return this.prisma.contactSubmission.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
+      include: { applicationCv: { select: { fileName: true, size: true } } },
     });
   }
 
   async findOne(id: string) {
     const submission = await this.prisma.contactSubmission.findUnique({
       where: { deletedAt: null, id },
+      include: { applicationCv: { select: { fileName: true, size: true } } },
     });
     if (!submission)
       throw new NotFoundException('Không tìm thấy yêu cầu liên hệ');
@@ -53,5 +55,14 @@ export class ContactService {
   async update(id: string, dto: UpdateContactSubmissionDto) {
     await this.findOne(id);
     return this.prisma.contactSubmission.update({ where: { id }, data: dto });
+  }
+
+  async downloadCv(id: string) {
+    await this.findOne(id);
+    const file = await this.prisma.applicationCv.findUnique({
+      where: { submissionId: id },
+    });
+    if (!file) throw new NotFoundException('Hồ sơ không có file CV đính kèm.');
+    return file;
   }
 }

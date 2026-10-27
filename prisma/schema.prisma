@@ -453,8 +453,25 @@ model ContactSubmission {
   createdAt    DateTime         @default(now()) @map("created_at")
   updatedAt    DateTime         @updatedAt @map("updated_at")
 
+  applicationPositionId    String?        @map("application_position_id")
+  applicationPositionTitle String?        @map("application_position_title")
+  applicationCvLink        String?        @map("application_cv_link")
+  applicationCv            ApplicationCv?
+
   @@index([deletedAt])
   @@map("contact_submissions")
+}
+
+// CV chỉ được đọc qua API quản trị, không có URL công khai.
+model ApplicationCv {
+  id           String            @id @default(uuid())
+  submissionId String            @unique @map("submission_id")
+  submission   ContactSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fileName     String            @map("file_name")
+  size         Int
+  content      Bytes
+
+  @@map("application_cvs")
 }
 
 model MediaAsset {

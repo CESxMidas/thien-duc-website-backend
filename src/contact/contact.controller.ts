@@ -6,11 +6,17 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { Role } from '../../generated/prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -28,6 +34,27 @@ export class ContactController {
   @Post()
   create(@Body() dto: CreateContactSubmissionDto, @Req() req: Request) {
     return this.contactService.create(dto, req.ip);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Get(':id/cv')
+  @ApiOperation({ summary: 'Tải CV riêng tư của hồ sơ ứng tuyển.' })
+  @ApiResponse({
+    status: 200,
+    description: 'File PDF tải xuống, yêu cầu quyền quản trị.',
+  })
+  async downloadCv(@Param('id') id: string, @Res() response: Response) {
+    const file = await this.contactService.downloadCv(id);
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('Content-Type', 'application/pdf');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="CV.pdf"; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    );
+    response.send(Buffer.from(file.content));
   }
 
   @ApiBearerAuth()

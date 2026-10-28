@@ -106,9 +106,9 @@ export class SearchService {
       SELECT n."id"
       FROM "news_posts" n, plainto_tsquery('simple', public.immutable_unaccent(${q})) AS query
       WHERE n."deleted_at" IS NULL AND ${newsPubliclyVisibleSql(now)}
-        AND news_search_document(n."title", n."summary", n."content", n."author") @@ query
+        AND news_search_document(n."title", n."content", n."author") @@ query
       ORDER BY ts_rank(
-                 news_search_document(n."title", n."summary", n."content", n."author"),
+                 news_search_document(n."title", n."content", n."author"),
                  query
                ) DESC,
                n."published_at" DESC NULLS LAST

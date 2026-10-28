@@ -52,7 +52,6 @@ const validPage = (content: unknown[]) => ({
 const validPost = (content: unknown[]) => ({
   slug: 'le-khoi-cong',
   title: { vi: 'Lễ khởi công', en: 'Groundbreaking' },
-  summary: { vi: 'Tóm tắt sự kiện khởi công', en: 'Event summary' },
   content,
 });
 
@@ -173,12 +172,4 @@ describe('field ngắn giữ nguyên trần 5.000 (không bị nâng lây)', () 
       expect(hasErrorAt(errors, 'title.vi')).toBe(true);
     },
   );
-
-  it('CreateNewsPostDto.summary vẫn chặn ở 5.001 ký tự', async () => {
-    const errors = await validateDto(CreateNewsPostDto, {
-      ...validPost([{ vi: 'Đoạn hợp lệ' }]),
-      summary: { vi: 'a'.repeat(OLD_LIMIT + 1) },
-    });
-    expect(hasErrorAt(errors, 'summary.vi')).toBe(true);
-  });
 });

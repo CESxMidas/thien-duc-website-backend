@@ -25,8 +25,6 @@ const posts = [
     slug: 'le-khoi-cong-fancy-tower-khu-do-thi-hung-phu',
     categorySlug: 'tin-du-an',
     title: 'Lễ khởi công Fancy Tower | Khu đô thị Hưng Phú',
-    summary:
-      'Dự án chung cư cao cấp Fancy Tower chính thức khởi công ngày 31/03/2021 tại Khu đô thị Hưng Phú, với quy mô 1 tầng hầm và 19 tầng nổi.',
     content: [
       'Ngày 31/03/2021, dự án chung cư cao cấp Fancy Tower tại Khu đô thị Hưng Phú chính thức được khởi công.',
       'Công trình được giới thiệu với quy mô 1 tầng hầm và 19 tầng nổi, nằm trong định hướng phát triển không gian sống hiện đại tại khu đô thị.',
@@ -74,14 +72,13 @@ async function main() {
   for (const post of posts) {
     await client.query(
       `INSERT INTO news_posts
-         (id, slug, category_id, title, summary, content, author, image,
+         (id, slug, category_id, title, content, author, image,
           event_date, published_at, status, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9,
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
                'PUBLISHED', now(), now())
        ON CONFLICT (slug) DO UPDATE
          SET category_id = EXCLUDED.category_id,
              title = EXCLUDED.title,
-             summary = EXCLUDED.summary,
              content = EXCLUDED.content,
              author = EXCLUDED.author,
              image = EXCLUDED.image,
@@ -93,7 +90,6 @@ async function main() {
         post.slug,
         categoryIds.get(post.categorySlug),
         JSON.stringify(vi(post.title)),
-        JSON.stringify(vi(post.summary)),
         paragraphs(post.content),
         post.author,
         post.image,

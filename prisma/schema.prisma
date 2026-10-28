@@ -294,7 +294,6 @@ model NewsPost {
   categoryId   String?       @map("category_id")
   category     NewsCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   title        Json
-  summary      Json
   content      Json?
   author       String?
   referenceUrl String?       @map("reference_url")

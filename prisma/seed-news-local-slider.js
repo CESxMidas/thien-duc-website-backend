@@ -40,10 +40,6 @@ const posts = Array.from({ length: 6 }, (_, index) => {
       vi: `[LOCAL] Tin kiểm thử slider số ${number}`,
       en: `[LOCAL] Slider test article ${number}`,
     },
-    summary: {
-      vi: `Bản ghi giả dùng để kiểm slider trang chủ ở máy cục bộ (số ${number}).`,
-      en: `Local-only fixture used to verify the homepage slider (item ${number}).`,
-    },
     content: [
       {
         vi: `Nội dung mẫu của bài số ${number}. Bản ghi này chỉ tồn tại ở máy cục bộ.`,
@@ -119,14 +115,13 @@ async function main() {
     for (const post of posts) {
       await client.query(
         `INSERT INTO news_posts
-           (id, slug, category_id, title, summary, content, author, image,
+           (id, slug, category_id, title, content, author, image,
             published_at, status, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
                  'PUBLISHED', now(), now())
          ON CONFLICT (slug) DO UPDATE SET
            category_id  = EXCLUDED.category_id,
            title        = EXCLUDED.title,
-           summary      = EXCLUDED.summary,
            content      = EXCLUDED.content,
            image        = EXCLUDED.image,
            published_at = EXCLUDED.published_at,
@@ -136,7 +131,6 @@ async function main() {
           post.slug,
           categoryId,
           JSON.stringify(post.title),
-          JSON.stringify(post.summary),
           JSON.stringify(post.content),
           'Thiên Đức (local fixture)',
           post.image,

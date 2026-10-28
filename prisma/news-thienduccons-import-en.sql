@@ -33,7 +33,6 @@ UPDATE news_categories SET name = name || '{"en":"Architecture & Construction"}'
 -- [1] le-khoi-cong-fancy-tower-khu-do-thi-hung-phu (2 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Fancy Tower Groundbreaking Ceremony | Hung Phu Urban Area"}'::jsonb,
-  summary = summary || '{"en":"On 31 March 2021, the Fancy Tower high-end apartment project was officially started. The building stands in the Hung Phu urban area and comprises one basement and 19 above-ground floors with many facilities such as shophouses, a fine-dining restaurant and a swimming pool."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -48,7 +47,6 @@ WHERE slug = 'le-khoi-cong-fancy-tower-khu-do-thi-hung-phu';
 -- [2] nhung-mau-thiet-ke-san-thuong-dep (10 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Beautiful rooftop terrace design ideas"}'::jsonb,
-  summary = summary || '{"en":"A rooftop garden with a beautiful natural setting brings a refreshing feeling. The article introduces a series of ideas: a garden on the 25th floor covered with irises and lavender; a terrace with a hot tub for relaxing while watching the city from above; a terrace turned into an outdoor dining area; and a simple, charming rooftop garden full of greenery."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -71,7 +69,6 @@ WHERE slug = 'nhung-mau-thiet-ke-san-thuong-dep';
 -- [3] nhung-luu-y-de-bai-tri-phong-ngu-hop-phong-thuy (12 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Notes on arranging a bedroom in line with feng shui"}'::jsonb,
-  summary = summary || '{"en":"The bedroom holds a critical position in every home. The article sets out feng shui principles for arranging it: ideally no mirror in the bedroom; avoid furniture with sharp table and bed edges as they weaken the flow of energy, so choose round or oval pieces or have the edges rounded off; plus many notes on accessories and layout to turn the bedroom into a warm, peaceful retreat."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -96,7 +93,6 @@ WHERE slug = 'nhung-luu-y-de-bai-tri-phong-ngu-hop-phong-thuy';
 -- [4] nha-xay-san-xu-huong-moi-cua-bat-dong-san-vung-ven-tphcm (4 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Ready-built houses - a new trend in the suburban property market of Ho Chi Minh City"}'::jsonb,
-  summary = summary || '{"en":"Private residential land has always been a favoured segment, but because many buyers lack expertise and time to manage construction, they choose ready-built houses instead. Advantages: move in right after purchase, a brand-new house close to central areas at a reasonable price; whereas buying land and building yourself pushes costs up, not to mention permits, design, material selection and site supervision."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -113,7 +109,6 @@ WHERE slug = 'nha-xay-san-xu-huong-moi-cua-bat-dong-san-vung-ven-tphcm';
 -- [5] ngoi-nha-cua-nang-luong-thiet-ke-bg-architekture (4 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"House of Energy / design: BG Architekture"}'::jsonb,
-  summary = summary || '{"en":"The world first certified passive house in Germany exceeds the EU energy directives that apply to all new buildings from 2021. The 900 sq.m building, named House of Energy, has a heating demand of only 8 kWh per sq.m, an airtight facade, heat-recovery ventilation, a ground-source heat pump and a photovoltaic system."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -130,7 +125,6 @@ WHERE slug = 'ngoi-nha-cua-nang-luong-thiet-ke-bg-architekture';
 -- [6] nhung-trung-tam-hanh-chinh-nghin-ty-dong (48 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Administrative centres worth thousands of billions of dong"}'::jsonb,
-  summary = summary || '{"en":"To bring all state agencies under one roof and make administrative and public transactions easier for citizens, many provinces and cities have built administrative centres costing thousands of billions of dong."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -191,7 +185,6 @@ WHERE slug = 'nhung-trung-tam-hanh-chinh-nghin-ty-dong';
 -- [7] thiet-ke-nha-34m-tren-dat-no-hau (24 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Designing a 34 sq.m house on a plot that widens at the rear"}'::jsonb,
-  summary = summary || '{"en":"Architectural advice for a 34 sq.m plot in an alley (3 m frontage, widening to 4.5 m at the rear, 9 m deep) for five adults: ground floor with living room, kitchen, toilet and parking for three motorbikes; mezzanine with one bedroom and a toilet; second floor with two bedrooms and a toilet; roof level with a Guanyin statue and a drying yard. The architect proposes a modern, airy layout."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -228,7 +221,6 @@ WHERE slug = 'thiet-ke-nha-34m-tren-dat-no-hau';
 -- [8] ly-luan-phe-binh-kien-truc... (21 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Architectural theory and criticism: linking theory with practice and the values of identity"}'::jsonb,
-  summary = summary || '{"en":"Architectural criticism in specialist journals has taken issue with many trends of garish, alien construction that damage cultural identity. Meanwhile, architectural theory remains weaker than criticism; only with theory do the steps taken follow the right direction and prove effective. The article argues that architectural criticism and theory must go one step ahead to contribute to the development of the profession."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -262,7 +254,6 @@ WHERE slug = 'ly-luan-phe-binh-kien-truc-gan-ly-thuyet-voi-thuc-tien-va-gia-tri-
 -- [9] gach-chu-u-giai-phap-moi-danh-cho-tuong-xay-ben-vung (3 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"U-shaped block - a new solution for durable masonry walls"}'::jsonb,
-  summary = summary || '{"en":"While cooperating with the Vietnam Institute for Building Science and Technology IBST (Ministry of Construction) to develop the standard for the execution and acceptance of concrete masonry unit walls, Khang Minh Brick JSC observed that foreign contractors, especially Japanese ones, often add bond beams and columns to make large walls more durable. U-shaped concrete masonry units are a suitable solution for building bond beams."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -278,7 +269,6 @@ WHERE slug = 'gach-chu-u-giai-phap-moi-danh-cho-tuong-xay-ben-vung';
 -- [10] di-tich-quoc-gia-lang-co-duong-lam (20 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"National Relic - Duong Lam ancient village"}'::jsonb,
-  summary = summary || '{"en":"Duong Lam ancient village embodies the full cultural values of an old Vietnamese village with its banyan tree, well, communal house yard and laterite houses hundreds of years old; it is also the land of two kings, with temples to Phung Hung and Ngo Quyen. The village lies about 47 km west of Hanoi and 5 km from the centre of Son Tay town, and brings together five hamlets: Mong Phu, Cam Thinh, Dong Sang, Doai Giap and Cam Lam."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -311,7 +301,6 @@ WHERE slug = 'di-tich-quoc-gia-lang-co-duong-lam';
 -- [11] kien-truc-thu-vien-cong-dong-o-thu-do-amsterdam-ha-lan (41 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"The architecture of the public library in Amsterdam, the Netherlands"}'::jsonb,
-  summary = summary || '{"en":"An introduction to De Openbare Bibliotheek - the public library in Amsterdam, a place that both gathers books and offers a distinctive, well-considered architectural space. Design: Jo Coenen & Co, architect Jo Coenen; client: the Amsterdam city council; location: Oosterdokseiland 143, 1011 DL Amsterdam; area 28,500 sq.m; completed in 2007."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -365,7 +354,6 @@ WHERE slug = 'kien-truc-thu-vien-cong-dong-o-thu-do-amsterdam-ha-lan';
 -- [12] huong-dan-chon-vi-tri-bep-trong-phong-bep (17 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"How to choose the position of the cooker in the kitchen"}'::jsonb,
-  summary = summary || '{"en":"The kitchen plays the most important role in the house yet is often the least invested in. The kitchen is not only where meals are cooked but also carries great feng shui weight, and the position of the stove in particular determines fortune and family relationships. The article sets out the basic principles for choosing the position of the cooker, starting with the rule that the cook must have a commanding view."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -395,7 +383,6 @@ WHERE slug = 'huong-dan-chon-vi-tri-bep-trong-phong-bep';
 -- [13] thiet-ke-san-vuon-hop-phong-thuy-mang-an-lanh-cho-gia-chu (24 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"A feng shui garden design that brings peace to the owner"}'::jsonb,
-  summary = summary || '{"en":"The prosperous energy of a house comes not only from arranging the interior according to feng shui; the exterior landscape also plays an extremely important role as the place that regulates and balances yin and yang energy for the living space."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -432,7 +419,6 @@ WHERE slug = 'thiet-ke-san-vuon-hop-phong-thuy-mang-an-lanh-cho-gia-chu';
 -- [14] pho-di-bo-sap-co-mat-tai-thanh-pho-ben-tre (25 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"A walking street is coming to Ben Tre city"}'::jsonb,
-  summary = summary || '{"en":"A new step for Ben Tre on its path of urbanisation, keeping pace with Vietnam key cities. Hung Long walking street - dubbed the second Nguyen Hue walking street and the only walking street in the western coastal region - is designed so that residents can take in a panoramic view of Ben Tre city. The street forms part of the master plan of the Hung Phu urban area project on Nguyen Thi Dinh street, Phu Tan ward, Ben Tre city."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -470,7 +456,6 @@ WHERE slug = 'pho-di-bo-sap-co-mat-tai-thanh-pho-ben-tre';
 -- [15] pho-di-bo-nguyen-hue-sap-co-mat-tai-thanh-pho-ben-tre (16 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"A Nguyen Hue style walking street is coming to Ben Tre city"}'::jsonb,
-  summary = summary || '{"en":"Hung Long walking street, with its distinctive strolling space and dubbed the second Nguyen Hue walking street, is the only walking street in the western coastal region, designed as a public meeting space with a soul. It forms part of the master plan of the Hung Phu urban area project on Nguyen Thi Dinh street, Phu Tan ward, Ben Tre city - a breakthrough by Thien Duc Investment Construction Trading Co., Ltd together with the authorities of Ben Tre province."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -499,7 +484,6 @@ WHERE slug = 'pho-di-bo-nguyen-hue-sap-co-mat-tai-thanh-pho-ben-tre';
 -- [16] tphcm-bat-dong-san-cao-cap-tang-gia-manh (16 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Ho Chi Minh City: high-end property prices rise sharply"}'::jsonb,
-  summary = summary || '{"en":"Besides an excessive supply of high-end apartments in Ho Chi Minh City, selling prices have also begun to rise sharply. Many experts warn that if developers keep pushing prices up, the market will freeze immediately. Primary prices have risen 7-10% and secondary prices 10-20%."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -528,7 +512,6 @@ WHERE slug = 'tphcm-bat-dong-san-cao-cap-tang-gia-manh';
 -- [17] se-tran-ngap-cac-thuong-vu-m-a-bat-dong-san-trong-nam-2016 (22 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"A wave of real estate M&A deals expected in 2016"}'::jsonb,
-  summary = summary || '{"en":"According to JLL, Vietnam has seen remarkable growth in M&A activity over the past 12 months and the upward trend is continuing."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)
@@ -563,7 +546,6 @@ WHERE slug = 'se-tran-ngap-cac-thuong-vu-m-a-bat-dong-san-trong-nam-2016';
 -- [18] le-khoi-cong-khu-do-thi-hung-phu-ben-tre-ngay-20-9 (8 doan)
 UPDATE news_posts SET
   title   = title   || '{"en":"Groundbreaking ceremony of the Hung Phu urban area - Ben Tre on 20 September"}'::jsonb,
-  summary = summary || '{"en":"On 20 September 2015, the Hung Phu urban area project in Ben Tre city was officially started. The ceremony was attended by Mr. Vo Thanh Hao - Secretary of the Provincial Party Committee, Mr. Cao Van Trong - Chairman of the People Committee of Ben Tre province, Mr. Truong Duy Hai - Standing Vice Chairman of the provincial People Committee, together with press agencies and representatives of departments and agencies. This is a strategically important project contributing to raising the urban standing of central Ben Tre city."}'::jsonb,
   content = (
     SELECT jsonb_agg(t.e || jsonb_build_object('en', a.en) ORDER BY t.i)
     FROM jsonb_array_elements(news_posts.content) WITH ORDINALITY AS t(e, i)

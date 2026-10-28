@@ -109,7 +109,7 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
   it('route ghi bị chặn khi không có token (401)', async () => {
     await request(http)
       .post('/api/news')
-      .send({ slug: SLUG, title: { vi: 'x' }, summary: { vi: 'x' } })
+      .send({ slug: SLUG, title: { vi: 'x' } })
       .expect(401);
   });
 
@@ -158,7 +158,7 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
       .send({
         slug: SLUG,
         title: { vi: 'Bài smoke e2e', en: 'E2E smoke post' },
-        summary: { vi: 'Bài tự sinh bởi e2e — sẽ bị xóa sau khi chạy.' },
+
         content: [{ vi: 'Đoạn nội dung kiểm thử.' }],
         image: cover,
         gallery,
@@ -222,7 +222,6 @@ describe('Smoke e2e — đăng nhập → nháp → đăng → public (task →8
       .send({
         slug: 'a'.repeat(161), // MaxLength(160)
         title: { vi: 'x' },
-        summary: { vi: 'x' },
       })
       .expect(400);
   });

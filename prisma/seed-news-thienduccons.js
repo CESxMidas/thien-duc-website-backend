@@ -84,14 +84,13 @@ async function main() {
 
     await client.query(
       `INSERT INTO news_posts
-         (id, slug, category_id, title, summary, content, author, image,
+         (id, slug, category_id, title, content, author, image,
           published_at, status, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9,
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
                now(), now())
        ON CONFLICT (slug) DO UPDATE
          SET category_id = EXCLUDED.category_id,
              title = EXCLUDED.title,
-             summary = EXCLUDED.summary,
              content = EXCLUDED.content,
              author = EXCLUDED.author,
              image = EXCLUDED.image,
@@ -102,7 +101,6 @@ async function main() {
         post.slug,
         categoryId,
         JSON.stringify(vi(post.title)),
-        JSON.stringify(vi(post.summary)),
         paragraphs(post.content),
         post.author,
         post.image,

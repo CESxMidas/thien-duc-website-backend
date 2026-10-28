@@ -39,15 +39,6 @@ export class CreateNewsPostDto {
   @Type(() => TranslatedTextDto)
   title!: TranslatedTextDto;
 
-  @ApiProperty({
-    type: TranslatedTextDto,
-    description: 'Tóm tắt bài viết hiển thị trên thẻ tin và phần mở đầu.',
-  })
-  @IsDefined()
-  @ValidateNested()
-  @Type(() => TranslatedTextDto)
-  summary!: TranslatedTextDto;
-
   /**
    * Nội dung bài viết là **mảng đoạn văn**, mỗi đoạn là một field song ngữ —
    * khớp `NewsPostDto.content: LocalizedText[]` mà frontend đang đọc.

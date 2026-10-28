@@ -33,10 +33,23 @@ const pipe = new ValidationPipe({
 const validPost = {
   slug: 'bai-viet-moi',
   title: { vi: 'Tiêu đề', en: 'Title' },
-  summary: { vi: 'Tóm tắt bài viết', en: 'Summary' },
 };
 
 const SCHEDULED_AT = '2026-08-20T01:00:00.000Z';
+
+describe('hợp đồng tin tức không còn trường summary', () => {
+  it.each([CreateNewsPostDto, UpdateNewsPostDto])(
+    'từ chối summary thay vì âm thầm bỏ dữ liệu',
+    async (metatype) => {
+      await expect(
+        pipe.transform(
+          { ...validPost, summary: { vi: 'Tóm tắt cũ' } },
+          { type: 'body', metatype },
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+    },
+  );
+});
 
 describe('scheduledAt không ghi được qua API nội dung chung (hồi quy bảo mật)', () => {
   it.each([
@@ -66,7 +79,7 @@ describe('scheduledAt không ghi được qua API nội dung chung (hồi quy b�
     }
   });
 
-  it('payload hợp lệ KHÔNG có scheduledAt vẫn qua như cũ', async () => {
+  it('tạo bài không cần summary và không có scheduledAt vẫn hợp lệ', async () => {
     await expect(
       pipe.transform(validPost, {
         type: 'body',

@@ -232,7 +232,6 @@ export class NewsService {
         data: {
           ...rest,
           title: json(rest.title),
-          summary: json(rest.summary),
           content: json(rest.content),
           referenceUrl: referenceUrl || null,
           eventDate: eventDate ? new Date(eventDate) : undefined,
@@ -274,7 +273,6 @@ export class NewsService {
         data: {
           ...rest,
           title: json(rest.title),
-          summary: json(rest.summary),
           content: json(rest.content),
           referenceUrl:
             referenceUrl === undefined ? undefined : referenceUrl || null,

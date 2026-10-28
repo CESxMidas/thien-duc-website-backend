@@ -135,7 +135,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
     return request(http)
       .post('/api/news')
       .set('Authorization', `Bearer ${token}`)
-      .send({ slug, title: { vi: 'Tiêu đề' }, summary: { vi: 'Tóm tắt' } });
+      .send({ slug, title: { vi: 'Tiêu đề' } });
   }
 
   describe('envelope + hợp đồng cơ bản', () => {
@@ -163,7 +163,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-unknown`,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           fieldKhongTonTai: 'x',
         })
         .expect(400);
@@ -180,7 +180,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
           .send({
             slug: `${SLUG}-mass`,
             title: { vi: 't' },
-            summary: { vi: 's' },
+
             ...evil,
           })
           .expect(400);
@@ -194,7 +194,6 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-type`,
           title: 'chuỗi trần',
-          summary: { vi: 's' },
         })
         .expect(400);
     });
@@ -216,7 +215,6 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: 'a'.repeat(161),
           title: { vi: 't' },
-          summary: { vi: 's' },
         })
         .expect(400);
 
@@ -234,7 +232,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-nested`,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           content: [{ vi: 'ok' }, { vi: 'x'.repeat(100_001) }],
         })
         .expect(400);
@@ -245,16 +243,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
   // Hồi quy D2 — trước bản sửa đây là 500 (PrismaClientValidationError).
   describe('D2 — thiếu field bắt buộc → 400, KHÔNG phải 500', () => {
     const missing: Array<[string, string, Record<string, unknown>]> = [
-      [
-        'news thiếu title',
-        '/api/news',
-        { slug: `${SLUG}-m1`, summary: { vi: 's' } },
-      ],
-      [
-        'news thiếu summary',
-        '/api/news',
-        { slug: `${SLUG}-m2`, title: { vi: 't' } },
-      ],
+      ['news thiếu title', '/api/news', { slug: `${SLUG}-m1` }],
       [
         'projects thiếu title',
         '/api/projects',
@@ -344,7 +333,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
       const res = await request(http)
         .post('/api/news')
         .set('Authorization', `Bearer ${token}`)
-        .send({ slug, title: { vi: 't' }, summary: { vi: 's' } })
+        .send({ slug, title: { vi: 't' } })
         .expect(409);
       expect((res.body as ErrorEnvelope).error.code).toBe('Conflict');
     });
@@ -401,7 +390,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-imgjs`,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           image: 'javascript:alert(1)',
         })
         .expect(400);
@@ -416,7 +405,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           image: 'https://res.cloudinary.com/demo/image/upload/v1/a.webp',
         })
         .expect(201);
@@ -433,7 +422,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         await request(http)
           .post('/api/news')
           .set('Authorization', `Bearer ${token}`)
-          .send({ slug: `${SLUG}-blank`, title: { vi }, summary: { vi: 's' } })
+          .send({ slug: `${SLUG}-blank`, title: { vi } })
           .expect(400);
       },
     );
@@ -454,7 +443,6 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug,
           title: { vi: '  Tiêu đề thật  ' },
-          summary: { vi: 's' },
         })
         .expect(201);
     });
@@ -472,7 +460,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           content: Array.from({ length: 500 }, () => ({ ...block })),
         })
         .expect(201);
@@ -485,7 +473,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-b501`,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           content: Array.from({ length: 501 }, () => ({ ...block })),
         })
         .expect(400);
@@ -498,7 +486,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
         .send({
           slug: `${SLUG}-b5000`,
           title: { vi: 't' },
-          summary: { vi: 's' },
+
           content: Array.from({ length: 5000 }, () => ({ ...block })),
         })
         .expect(400);
@@ -509,7 +497,7 @@ describe('HTTP foundation e2e (PostgreSQL thật)', () => {
     it('route ghi không token → 401', async () => {
       await request(http)
         .post('/api/news')
-        .send({ slug: `${SLUG}-401`, title: { vi: 't' }, summary: { vi: 's' } })
+        .send({ slug: `${SLUG}-401`, title: { vi: 't' } })
         .expect(401);
     });
 

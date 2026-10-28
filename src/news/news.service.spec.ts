@@ -21,7 +21,6 @@ import { CreateNewsPostDto } from './dto/create-news-post.dto';
 const dto: CreateNewsPostDto = {
   slug: 'bai-viet-moi',
   title: { vi: 'Tiêu đề', en: 'Title' },
-  summary: { vi: 'Tóm tắt bài viết', en: 'Summary' },
   content: [{ vi: 'Đoạn 1', en: 'Paragraph 1' }],
 };
 

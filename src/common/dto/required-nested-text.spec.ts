@@ -47,12 +47,6 @@ describe('field song ngữ bắt buộc — thiếu thì bị chặn ở tầng 
       'title',
     ],
     [
-      'CreateNewsPostDto.summary',
-      CreateNewsPostDto,
-      { slug: 'a', title: { vi: 't' } },
-      'summary',
-    ],
-    [
       'CreateNewsCategoryDto.name',
       CreateNewsCategoryDto,
       { slug: 'a' },

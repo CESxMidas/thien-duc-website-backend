@@ -66,7 +66,7 @@ function props(
 }
 
 describe('D5 — field bat buoc tu choi chuoi chi gom khoang trang', () => {
-  const newsBase = { slug: 'a', title: { vi: 't' }, summary: { vi: 's' } };
+  const newsBase = { slug: 'a', title: { vi: 't' } };
 
   it.each([[''], [' '], ['   '], [TAB], [LF], [NBSP], [IDEO_SPACE]])(
     'news title.vi = %j bi chan',
@@ -76,12 +76,6 @@ describe('D5 — field bat buoc tu choi chuoi chi gom khoang trang', () => {
       ).toContain('title');
     },
   );
-
-  it('news summary.vi trang bi chan', () => {
-    expect(
-      props(CreateNewsPostDto, { ...newsBase, summary: { vi: '  ' } }),
-    ).toContain('summary');
-  });
 
   it.each([[''], ['  '], [TAB + LF]])('news slug = %j bi chan', (slug) => {
     expect(props(CreateNewsPostDto, { ...newsBase, slug })).toContain('slug');

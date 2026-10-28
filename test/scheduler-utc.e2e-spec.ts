@@ -113,7 +113,6 @@ describe('Reconciler đăng theo lịch — hồi quy múi giờ (PostgreSQL th�
         });
         const base = {
           categoryId: category.id,
-          summary: vi('x'),
           content: [vi('x')],
         };
         const mk = (

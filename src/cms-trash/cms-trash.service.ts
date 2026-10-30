@@ -2,12 +2,18 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ContentStatus, Prisma, Role } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CMS_RECORDS, CmsRecordKind } from './cms-records';
+import {
+  BulkDeleteMode,
+  BulkDeleteRecordsDto,
+} from './bulk-delete-records.dto';
 
 type RecordRow = {
   id: string;
@@ -28,7 +34,53 @@ type Delegate = {
 
 @Injectable()
 export class CmsTrashService {
+  private readonly logger = new Logger(CmsTrashService.name);
   constructor(private readonly prisma: PrismaService) {}
+
+  async bulkDelete(
+    kind: CmsRecordKind,
+    dto: BulkDeleteRecordsDto,
+    actorId: string,
+  ) {
+    await this.authorize(actorId);
+    if (dto.mode === BulkDeleteMode.PERMANENT && dto.confirm !== true)
+      throw new BadRequestException('Cần xác nhận xóa vĩnh viễn.');
+    const succeededIds: string[] = [];
+    const failed: { id: string; message: string; status: number }[] = [];
+    let remainingIds: string[] = [];
+    // Từng mục dùng nguyên luồng bảo vệ/cascade hiện có, đọc lại quyền mỗi lần.
+    for (const [index, id] of dto.ids.entries()) {
+      try {
+        if (dto.mode === BulkDeleteMode.PERMANENT)
+          await this.purge(kind, id, actorId);
+        else await this.trash(kind, id, actorId);
+        succeededIds.push(id);
+      } catch (error) {
+        const status = error instanceof HttpException ? error.getStatus() : 500;
+        failed.push({
+          id,
+          status,
+          message:
+            error instanceof HttpException
+              ? error.message
+              : 'Không xóa được mục này. Vui lòng thử lại.',
+        });
+        if (!(error instanceof HttpException))
+          this.logger.error('Xóa nhiều mục CMS gặp lỗi nội bộ.');
+        // Thu hồi quyền hoặc lỗi hệ thống: dừng, không tiếp tục tác động bản ghi khác.
+        if (
+          status === 401 ||
+          status === 403 ||
+          status === 429 ||
+          status >= 500
+        ) {
+          remainingIds = dto.ids.slice(index + 1);
+          break;
+        }
+      }
+    }
+    return { succeededIds, failed, remainingIds };
+  }
 
   private async transaction<T>(
     work: (tx: Prisma.TransactionClient) => Promise<T>,

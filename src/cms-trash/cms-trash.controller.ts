@@ -5,6 +5,7 @@ import {
   DefaultValuePipe,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseEnumPipe,
   ParseIntPipe,
@@ -24,6 +25,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CmsRecordKind } from './cms-records';
 import { CmsTrashService } from './cms-trash.service';
 import { PurgeRecordDto } from './purge-record.dto';
+import { BulkDeleteRecordsDto } from './bulk-delete-records.dto';
 
 @ApiTags('cms-trash')
 @ApiBearerAuth()
@@ -31,6 +33,30 @@ import { PurgeRecordDto } from './purge-record.dto';
 @Controller('cms-trash')
 export class CmsTrashController {
   constructor(private readonly service: CmsTrashService) {}
+
+  @Post(':kind/bulk-delete')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Xóa các mục được chọn, kiểm lại quyền cho từng bản ghi',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Trả danh sách thành công, thất bại và chưa xử lý; không hoàn tác các mục đã xóa.',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'ID hoặc phương thức không hợp lệ, thiếu xác nhận xóa vĩnh viễn.',
+  })
+  @ApiResponse({ status: 403, description: 'Chưa được cấp quyền xóa CMS.' })
+  bulkDelete(
+    @Param('kind', new ParseEnumPipe(CmsRecordKind)) kind: CmsRecordKind,
+    @Body() dto: BulkDeleteRecordsDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.service.bulkDelete(kind, dto, user.id);
+  }
 
   @Delete(':kind/:id/permanent')
   @ApiOperation({ summary: 'Xóa vĩnh viễn nội dung, yêu cầu xác nhận rõ ràng' })

@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CmsTrashService } from './cms-trash.service';
 import { CmsTrashController } from './cms-trash.controller';
 import { CMS_RECORDS, CmsRecordKind } from './cms-records';
+import { BulkDeleteMode } from './bulk-delete-records.dto';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const actorId = '00000000-0000-4000-8000-000000000002';
@@ -65,6 +66,91 @@ beforeEach(() => {
 });
 
 describe('Xóa, thùng rác và khôi phục toàn CMS', () => {
+  it.each(Object.values(CmsRecordKind))(
+    '%s: xóa nhiều mục vẫn dùng bảo vệ từng bản ghi',
+    async (kind) => {
+      const ids = [id, '00000000-0000-4000-8000-000000000003'];
+      const result = await service.bulkDelete(
+        kind,
+        { ids, mode: BulkDeleteMode.TRASH },
+        actorId,
+      );
+      expect(result).toEqual({
+        succeededIds: ids,
+        failed: [],
+        remainingIds: [],
+      });
+      expect(user.findUnique).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it('xóa nhiều mục vĩnh viễn bắt buộc xác nhận', async () => {
+    await expect(
+      service.bulkDelete(
+        CmsRecordKind.NEWS,
+        { ids: [id], mode: BulkDeleteMode.PERMANENT },
+        actorId,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tables.newsPost.deleteMany).not.toHaveBeenCalled();
+    expect(
+      await service.bulkDelete(
+        CmsRecordKind.NEWS,
+        { ids: [id], mode: BulkDeleteMode.PERMANENT, confirm: true },
+        actorId,
+      ),
+    ).toEqual({ succeededIds: [id], failed: [], remainingIds: [] });
+  });
+
+  it('thu hồi quyền giữa lô dừng các mục còn lại và báo đúng phần đã thành công', async () => {
+    const active = { role: Role.EDITOR, isActive: true, canDeleteCms: true };
+    user.findUnique
+      .mockResolvedValueOnce(active)
+      .mockResolvedValueOnce(active)
+      .mockResolvedValue({ ...active, canDeleteCms: false });
+    const ids = [id, 'second', 'third'];
+    const result = await service.bulkDelete(
+      CmsRecordKind.NEWS,
+      { ids, mode: BulkDeleteMode.TRASH },
+      actorId,
+    );
+    expect(result.succeededIds).toEqual([id]);
+    expect(result.failed).toEqual([
+      expect.objectContaining({ id: 'second', status: 403 }),
+    ]);
+    expect(result.remainingIds).toEqual(['third']);
+    expect(tables.newsPost.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('xung đột một mục không làm mất kết quả thành công của các mục khác', async () => {
+    tables.newsPost.updateMany.mockRejectedValueOnce(
+      new ConflictException('Nội dung vừa thay đổi.'),
+    );
+    const result = await service.bulkDelete(
+      CmsRecordKind.NEWS,
+      { ids: [id, 'second'], mode: BulkDeleteMode.TRASH },
+      actorId,
+    );
+    expect(result.succeededIds).toEqual(['second']);
+    expect(result.failed).toEqual([
+      { id, status: 409, message: 'Nội dung vừa thay đổi.' },
+    ]);
+    expect(result.remainingIds).toEqual([]);
+  });
+
+  it('lô tài khoản vẫn chặn xóa chính mình', async () => {
+    const result = await service.bulkDelete(
+      CmsRecordKind.USERS,
+      { ids: [actorId], mode: BulkDeleteMode.TRASH },
+      actorId,
+    );
+    expect(result.succeededIds).toEqual([]);
+    expect(result.failed).toEqual([
+      expect.objectContaining({ id: actorId, status: 400 }),
+    ]);
+    expect(user.updateMany).not.toHaveBeenCalled();
+  });
+
   it.each(Object.values(CmsRecordKind))(
     '%s: Super Admin đưa vào thùng rác, không xóa bản ghi',
     async (kind) => {
@@ -299,6 +385,59 @@ describe('Hợp đồng HTTP xóa vĩnh viễn', () => {
       .send({ confirm: true })
       .expect(200, { deleted: true });
   });
+  it('bulk API từ chối thiếu xác thực hoặc quyền, không xóa mục nào', async () => {
+    const route = '/cms-trash/news/bulk-delete';
+    await request(app.getHttpServer() as Server)
+      .post(route)
+      .send({ ids: [id], mode: 'trash' })
+      .expect(403);
+    user.findUnique.mockResolvedValue({
+      role: Role.ADMIN,
+      isActive: true,
+      canDeleteCms: false,
+    });
+    await request(app.getHttpServer() as Server)
+      .post(route)
+      .set('x-auth', 'yes')
+      .send({ ids: [id], mode: 'trash' })
+      .expect(403);
+    expect(tables.newsPost.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('bulk API kiểm UUID, trùng ID, giới hạn lô, phương thức và xác nhận', async () => {
+    const route = '/cms-trash/news/bulk-delete';
+    for (const body of [
+      { ids: [], mode: 'trash' },
+      { ids: [id, id], mode: 'trash' },
+      { ids: ['bad'], mode: 'trash' },
+      { ids: [id], mode: 'invalid' },
+      { ids: [id], mode: 'permanent' },
+      { ids: [id], mode: 'permanent', confirm: false },
+      { ids: [id], mode: 'trash', role: 'SUPER_ADMIN' },
+      {
+        ids: Array.from(
+          { length: 101 },
+          (_, index) =>
+            `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        ),
+        mode: 'trash',
+      },
+    ]) {
+      await request(app.getHttpServer() as Server)
+        .post(route)
+        .set('x-auth', 'yes')
+        .send(body)
+        .expect(400);
+    }
+    expect(tables.newsPost.updateMany).not.toHaveBeenCalled();
+    expect(tables.newsPost.deleteMany).not.toHaveBeenCalled();
+    await request(app.getHttpServer() as Server)
+      .post(route)
+      .set('x-auth', 'yes')
+      .send({ ids: [id], mode: 'trash' })
+      .expect(200, { succeededIds: [id], failed: [], remainingIds: [] });
+  });
+
   it('chặn loại nội dung/UUID/trang sai', async () => {
     await request(app.getHttpServer() as Server)
       .delete(`/cms-trash/unknown/${id}`)
